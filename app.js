@@ -176,8 +176,8 @@ async function defensePitch(type){
 async function recordManualRunnerEvent(action){
  const g=currentGame();if(!g)return;const s=ensureLive(g);
  if(s.status==="已結束"){toast("比賽已結束");return}
- const index=Number($("runnerSelect").value),destination=$("runnerDestination").value;
- if(!Number.isInteger(index)||index<0||index>2||!s.bases[index]){toast("請先選擇壘上跑者");return}
+ const selectedRunner=$("runnerSelect").value,index=Number(selectedRunner),destination=$("runnerDestination").value;
+ if(selectedRunner===""||!Number.isInteger(index)||index<0||index>2||!s.bases[index]){toast("請先選擇壘上跑者");return}
  const runnerId=s.bases[index],from=index+1,to=destination==="home"?4:Number(destination);
  if(to!==4&&to<=from){toast("目標壘包必須在跑者前方");return}
  if(to!==4&&s.bases[to-1]&&to-1!==index){toast("目標壘包已有跑者，請先處理前方跑者");return}
