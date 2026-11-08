@@ -102,6 +102,20 @@ function autoChangeHalfIfThreeOuts(s){
  s._autoHalfNotice="第 "+endedInning+" 局"+(endedHalf==="top"?"上":"下")+"半局三出局，已自動換"+(endedHalf==="top"?"到下半局":"局");
  return true;
 }
+function attachRunRecords(s,scorers,fallbackPitcherId){
+ if(!scorers||!scorers.length)return [];
+ s.runnerPitcherMap=s.runnerPitcherMap||{};
+ s.runRecordSeq=(s.runRecordSeq||0);
+ const inningEvents=s.events.filter(e=>e.inning===s.inning&&e.half===s.half);
+ const priorDefensiveError=inningEvents.some(e=>e.meta?.outcome==="error"||e.meta?.fieldingError);
+ const priorPassedBall=inningEvents.some(e=>e.meta?.catcherEvent==="PB"||e.meta?.passedBallAdvance);
+ const autoEarned=!(priorDefensiveError||priorPassedBall);
+ return scorers.map((runnerId,index)=>{
+  const pitcherId=s.runnerPitcherMap[runnerId]||fallbackPitcherId||s.activePitcherId||"";
+  const record={id:"run-"+(++s.runRecordSeq),runnerId,pitcherId,earned:autoEarned,autoEarned,reviewed:false,inning:s.inning,half:s.half,reason:priorDefensiveError?"本半局曾有守備失誤，待覆核":priorPassedBall?"本半局曾有捕逸，待覆核":"依目前事件初判自責分"};
+  return record;
+ });
+}
 function countPitch(s,kind){
  s.pitches++;
  s.inningPitches[s.inning]=(s.inningPitches[s.inning]||0)+1;
@@ -142,6 +156,7 @@ async function recordCatcherEvent(type){
   const walk=s.balls>=4;
   const runnerResult=advanceWildPitchRunners(s,walk);
   const meta={catcherEvent:type,catcherId,pitcherId,catcherFaced:true,pitchType:"ball",wildPitch:true,wpRuns:runnerResult.runs,wpScoredRunners:runnerResult.scoredRunners,forcedWalk:walk};
+  if(runnerResult.runs)meta.runRecords=attachRunRecords(s,runnerResult.scoredRunners,pitcherId);
   if(walk){
    eventRecord(s,"四壞球保送",detail+"；本球為第 4 壞球"+(runnerResult.runs?"；滿壘推進，跑者得分":"；依四壞球規則推進跑者"),meta,before);
    s.balls=0;s.strikes=0;
@@ -197,6 +212,7 @@ async function recordManualRunnerEvent(action){
  if(action==="runnerSteal"){meta.stolenBaseAttempt=true;meta.stolenBase=true}
  if(action==="runnerWP")meta.wildPitchAdvance=true;
  if(action==="runnerPB")meta.passedBallAdvance=true;
+ if(to===4)meta.runRecords=attachRunRecords(s,[runnerId],s.activePitcherId||"");
  eventRecord(s,reason,runnerName+" 從"+baseName(from)+"前進至"+baseName(to)+(to===4?"，跑者得分":""),meta,before);
  await saveScoring();toast(reason+"已記錄"+(to===4?"，比分已更新":""));
 }
@@ -221,7 +237,11 @@ async function recordPitcherResult(type){
  }
  if(type!=="pitchGroundout")s.bases=next;
  if(runs)addRuns(g,s,runs);
- eventRecord(s,labels[type],(runs?"跑者得分 "+runs+" 分；":"")+(type==="pitchGroundout"?"壘包維持原狀":"壘包已依打擊結果更新"),{pitchType:"inPlay",pitcherOutcome:type,opponentHit:type!=="pitchGroundout",runs},before);
+ const scoringIds=bases.filter(Boolean).slice(0,runs);if(type==="pitchHomerun")scoringIds.push("batter-"+(s.events.length+1));
+ const runRecords=attachRunRecords(s,scoringIds,s.activePitcherId||"");
+ if(type==="pitchSingle"||type==="pitchInfieldHit")s.runnerPitcherMap=s.runnerPitcherMap||{},s.runnerPitcherMap[next[0]]=s.activePitcherId||"";
+ if(type==="pitchDouble"||type==="pitchTriple")s.runnerPitcherMap=s.runnerPitcherMap||{},s.runnerPitcherMap[next[type==="pitchDouble"?1:2]]=s.activePitcherId||"";
+ eventRecord(s,labels[type],(runs?"跑者得分 "+runs+" 分；":"")+(type==="pitchGroundout"?"壘包維持原狀":"壘包已依打擊結果更新"),{pitchType:"inPlay",pitcherOutcome:type,opponentHit:type!=="pitchGroundout",runs,runRecords},before);
  s.balls=0;s.strikes=0;
  if(type==="pitchGroundout")autoChangeHalfIfThreeOuts(s);
  await saveScoring();toast(type==="pitchGroundout"&&s.outs===0?"三出局！已自動換局":labels[type]+"，壘包與比分已更新");
@@ -362,14 +382,23 @@ function renderPitchAnalysis(){
   const total=pitches.length,balls=pitches.filter(e=>e.meta.pitchType==="ball").length;
   const strikes=pitches.filter(e=>["strike","foul","inPlay"].includes(e.meta.pitchType)).length;
   const fouls=pitches.filter(e=>e.meta.pitchType==="foul").length;
+  const pitcherRuns=group.events.flatMap(e=>e.meta?.runRecords||[]),runsAllowed=pitcherRuns.length,earnedRuns=pitcherRuns.filter(r=>r.earned).length,unearnedRuns=runsAllowed-earnedRuns;
   const ks=group.events.filter(e=>e.label==="三振出局").length,walks=group.events.filter(e=>e.label==="四壞球保送").length,wildPitches=group.events.filter(e=>e.meta?.wildPitch).length,balks=group.events.filter(e=>e.label==="投手犯規").length,errors=group.events.filter(e=>e.label==="失誤上壘").length,rate=total?Math.round(strikes/total*100):0;
   const rows=Object.keys(group.innings).sort((a,b)=>Number(a)-Number(b)).map(n=>{const x=group.innings[n];return '<tr><td>第 '+n+' 局</td><td>'+x.pitches+'</td><td>'+x.balls+'</td><td>'+x.strikes+'</td><td>'+x.fouls+'</td><td>'+x.k+'</td><td>'+x.bb+'</td></tr>'}).join("");
-  return '<article class="analysis-card"><div class="analysis-card-head"><h2>'+esc(name)+'</h2><span>'+total+' 球</span></div><div class="analysis-metrics"><div><small>好球率（含界外）</small><strong>'+(total?rate+"%":"--")+'</strong></div><div><small>好球／界外／場內球</small><strong>'+strikes+'</strong></div><div><small>壞球</small><strong>'+balls+'</strong></div><div><small>界外球</small><strong>'+fouls+'</strong></div><div><small>三振</small><strong>'+ks+'</strong></div><div><small>四壞</small><strong>'+walks+'</strong></div><div><small>暴投 WP</small><strong>'+wildPitches+'</strong></div><div><small>投手犯規</small><strong>'+balks+'</strong></div><div><small>失誤上壘</small><strong>'+errors+'</strong></div></div><div class="analysis-table-wrap"><table class="analysis-table"><thead><tr><th>局數</th><th>總球數</th><th>壞球</th><th>好球</th><th>界外</th><th>三振</th><th>四壞</th></tr></thead><tbody>'+rows+'</tbody></table></div></article>';
+  return '<article class="analysis-card"><div class="analysis-card-head"><h2>'+esc(name)+'</h2><span>'+total+' 球</span></div><div class="analysis-metrics"><div><small>好球率（含界外）</small><strong>'+(total?rate+"%":"--")+'</strong></div><div><small>好球／界外／場內球</small><strong>'+strikes+'</strong></div><div><small>壞球</small><strong>'+balls+'</strong></div><div><small>界外球</small><strong>'+fouls+'</strong></div><div><small>三振</small><strong>'+ks+'</strong></div><div><small>四壞</small><strong>'+walks+'</strong></div><div><small>失分 R</small><strong>'+runsAllowed+'</strong></div><div><small>自責分 ER</small><strong>'+earnedRuns+'</strong></div><div><small>非自責分 UER</small><strong>'+unearnedRuns+'</strong></div><div><small>暴投 WP</small><strong>'+wildPitches+'</strong></div><div><small>投手犯規</small><strong>'+balks+'</strong></div><div><small>失誤上壘</small><strong>'+errors+'</strong></div></div><div class="analysis-table-wrap"><table class="analysis-table"><thead><tr><th>局數</th><th>總球數</th><th>壞球</th><th>好球</th><th>界外</th><th>三振</th><th>四壞</th></tr></thead><tbody>'+rows+'</tbody></table></div></article>';
  }).join("");
- $("analysisContent").innerHTML=cards||'<div class="empty">這場比賽尚無可分析的投手事件。</div><p class="analysis-note">過去未指定投手的紀錄會歸在「未指定投手」。現在開始選擇投手，系統才會分開統計個人成績。</p>';
+ const runRows=events.flatMap((e,eventIndex)=>(e.meta?.runRecords||[]).map(r=>({e,r,eventIndex})));
+ const runReview=runRows.length?'<section class="run-review"><h3>失分判定與修正</h3>'+runRows.map(({e,r})=>{const p=state.players.find(x=>x.id===r.pitcherId);return '<div class="run-review-row"><span>'+esc(p?'#'+p.number+' '+p.name:'未指定投手')+'｜'+esc(e.inningLabel||'')+'｜'+esc(e.label)+'</span><select data-run-review="'+esc(r.id)+'" data-event-time="'+esc(e.time||'')+'"><option value="earned"'+(r.earned?' selected':'')+'>自責分 ER</option><option value="unearned"'+(!r.earned?' selected':'')+'>非自責分 UER</option></select></div>'}).join('')+'</section>':'';
+ $("analysisContent").innerHTML=(cards||'<div class="empty">這場比賽尚無可分析的投手事件。</div>')+runReview;
 }
 $("analysisGame").addEventListener("change",()=>{$("analysisPitcher").value="";renderPitchAnalysis()});
 $("analysisPitcher").addEventListener("change",renderPitchAnalysis);
+$("analysisContent").addEventListener("change",async e=>{
+ const select=e.target.closest("[data-run-review]");if(!select)return;
+ const g=state.games.find(x=>x.id===$("analysisGame").value);if(!g?.live)return;
+ for(const event of g.live.events||[]){const run=(event.meta?.runRecords||[]).find(x=>x.id===select.dataset.runReview);if(run){run.earned=select.value==="earned";run.reviewed=true;run.reason="紀錄者手動修正";break}}
+ await persist();scheduleCloudSync();renderPitchAnalysis();toast("已更新自責分判定");
+});
 
 function renderBatterAnalysis(){
  const gameSelect=$("battingGame"),batterSelect=$("analysisBatter"),games=state.games.filter(g=>g.live&&Array.isArray(g.live.events));
