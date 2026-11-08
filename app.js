@@ -161,6 +161,31 @@ async function defensePitch(type){
  }
  await saveScoring();
 }
+async function recordPitcherResult(type){
+ const g=currentGame();if(!g)return;const s=ensureLive(g);
+ if(s.status==="已結束"){toast("比賽已結束");return}
+ if(ourTeamBatting(g,s)){toast("目前是我方進攻");return}
+ const labels={pitchSingle:"對方一壘安打",pitchDouble:"對方二壘安打",pitchTriple:"對方三壘安打",pitchHomerun:"對方全壘打",pitchGroundout:"對方內野出局"};
+ const before={balls:s.balls,strikes:s.strikes,outs:s.outs,pitches:s.pitches,inningPitches:{...s.inningPitches}};
+ countPitch(s,"inPlay");
+ const bases=[...s.bases],next=[null,null,null];let runs=0;
+ if(type==="pitchSingle"){
+  if(bases[2])runs++;if(bases[1])next[2]=bases[1];if(bases[0])next[1]=bases[0];next[0]="opponent-batter-"+(s.events.length+1);
+ }else if(type==="pitchDouble"){
+  if(bases[2])runs++;if(bases[1])runs++;if(bases[0])next[2]=bases[0];next[1]="opponent-batter-"+(s.events.length+1);
+ }else if(type==="pitchTriple"){
+  runs=bases.filter(Boolean).length;next[2]="opponent-batter-"+(s.events.length+1);
+ }else if(type==="pitchHomerun"){
+  runs=bases.filter(Boolean).length+1;
+ }else{
+  s.outs=Math.min(3,s.outs+1);next.splice(0,3,...bases);
+ }
+ if(type!=="pitchGroundout")s.bases=next;
+ if(runs)addRuns(g,s,runs);
+ eventRecord(s,labels[type],(runs?"跑者得分 "+runs+" 分；":"")+(type==="pitchGroundout"?"壘包維持原狀":"壘包已依打擊結果更新"),{pitchType:"inPlay",pitcherOutcome:type,opponentHit:type!=="pitchGroundout",runs},before);
+ s.balls=0;s.strikes=0;
+ await saveScoring();toast(labels[type]+"，壘包與比分已更新");
+}
 async function pitcherOutcome(type){
  const g=currentGame();if(!g)return;const s=ensureLive(g);
  if(s.status==="已結束"){toast("比賽已結束");return}
@@ -237,9 +262,11 @@ $("pitcherSelect").addEventListener("change",async e=>{
  if(nextId===previousId)return;
  const playerName=id=>{const p=state.players.find(x=>x.id===id);return p?"#"+p.number+" "+p.name:"未指定投手"};
  const detail=(previousId?playerName(previousId):"尚未指定投手")+" → "+(nextId?playerName(nextId):"未指定投手");
- eventRecord(s,nextId?"投手登板／更換":"投手取消指定",detail,{pitcherChange:true,fromPitcherId:previousId,toPitcherId:nextId});
+ const previousCount={balls:s.balls,strikes:s.strikes};
+ eventRecord(s,nextId?"投手登板／更換":"投手取消指定",detail,{pitcherChange:true,fromPitcherId:previousId,toPitcherId:nextId,previousPitcherCount:previousCount});
  s.activePitcherId=nextId;
- await persist();scheduleCloudSync();renderScoring();toast(nextId?"投手輪替已記錄":"已取消目前投手");
+ s.balls=0;s.strikes=0;
+ await persist();scheduleCloudSync();renderScoring();toast(nextId?"投手輪替已記錄，新投手球數歸零":"已取消目前投手");
 });
 $("batterSelect").addEventListener("change",async e=>{const g=currentGame();if(!g)return;ensureLive(g).activeBatterId=e.target.value;await persist();scheduleCloudSync();toast(e.target.value?"已切換目前打者":"目前打者設為未指定")});
 const fieldPositionOptions=[["P","投手"],["C","捕手"],["1B","一壘手"],["2B","二壘手"],["3B","三壘手"],["SS","游擊手"],["LF","左外野手"],["CF","中外野手"],["RF","右外野手"]];
@@ -259,7 +286,8 @@ $("scorePage").addEventListener("click",async e=>{
  if(a==="finish"||a==="resume"){const g=currentGame();if(g){ensureLive(g).status=a==="finish"?"已結束":"進行中";await saveScoring()}return}
  if(a==="awayPlus"){await adjustScore("away",1);return}if(a==="awayMinus"){await adjustScore("away",-1);return}
  if(a==="homePlus"){await adjustScore("home",1);return}if(a==="homeMinus"){await adjustScore("home",-1);return}
- if(["ball","strike","foul","inPlay"].includes(a)){await defensePitch(a);return}
+ if(["ball","strike","foul"].includes(a)){await defensePitch(a);return}
+ if(["pitchSingle","pitchDouble","pitchTriple","pitchHomerun","pitchGroundout"].includes(a)){await recordPitcherResult(a);return}
  const g=currentGame();if(["walk","error"].includes(a)){if(g&&ourTeamBatting(g,ensureLive(g)))await offenseResult(a);else await pitcherOutcome(a);return}
  if(a==="strikeout"){if(g&&ourTeamBatting(g,ensureLive(g)))await offenseResult(a);else await pitcherOutcome(a);return}
  if(a==="balk"){await pitcherOutcome(a);return}
