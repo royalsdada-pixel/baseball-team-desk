@@ -318,7 +318,7 @@ $("cloudUpload").addEventListener("click",async()=>{
  if(!count){toast("本機沒有可上傳的資料");return}
  if(!confirm("即將以這台裝置的本機資料，完整取代雲端資料。\n球隊："+state.teams.length+"、球員："+state.players.length+"、賽事："+state.games.length+"\n請確認已先匯出 JSON 備份，確定繼續？"))return;
  const b=$("cloudUpload");b.disabled=true;b.textContent="上傳中…";
- try{await window.firebaseBridge.uploadWorkspace(state);toast("本機資料已上傳至雲端");$("cloudStatus").textContent="雲端：已同步（剛剛上傳）"}
+ try{const rev=await window.firebaseBridge.uploadWorkspace(state);if(cloudSyncEnabled){cloudSyncRevision=rev;localStorage.setItem(syncPreferenceKey()+"-revision",String(rev))}toast("本機資料已上傳至雲端");$("cloudStatus").textContent="雲端：已同步（剛剛上傳）"}
  catch(err){console.error(err);toast("上傳失敗："+(err.message||"請檢查 Firestore 規則"))}
  finally{b.disabled=false;b.textContent="上傳本機資料"}
 });
@@ -330,6 +330,7 @@ $("cloudDownload").addEventListener("click",async()=>{
   const remote=await window.firebaseBridge.downloadWorkspace();
   if(!remote.teams.length&&!remote.players.length&&!remote.games.length){toast("雲端目前沒有資料，沒有變更本機內容");return}
   state={teams:remote.teams,players:remote.players,games:remote.games};
+  if(cloudSyncEnabled){cloudSyncRevision=remote._revision;localStorage.setItem(syncPreferenceKey()+"-revision",String(cloudSyncRevision))}
   await save();toast("雲端資料已下載到本機");$("cloudStatus").textContent="雲端：已同步（剛剛下載）";
  }catch(err){console.error(err);toast("下載失敗："+(err.message||"請檢查 Firestore 規則"))}
  finally{b.disabled=false;b.textContent="下載雲端資料"}
