@@ -69,7 +69,7 @@ function renderScoring(){
 async function saveScoring(){await persist();renderScoring()}
 function eventRecord(s,label,detail="",meta={},beforeOverride=null){
  const before=beforeOverride||{balls:s.balls,strikes:s.strikes,outs:s.outs,pitches:s.pitches,inningPitches:{...s.inningPitches}};
- const eventMeta={...meta};if(meta.pitchType||meta.outcome)eventMeta.pitcherId=s.activePitcherId||"";if(meta.batterOutcome)eventMeta.batterId=s.activeBatterId||"";
+ const eventMeta={...meta};if(meta.pitchType||meta.outcome)eventMeta.pitcherId=s.activePitcherId||"";if(meta.batterOutcome)eventMeta.batterId=s.activeBatterId||"";if(meta.batterOutcome)eventMeta.batterId=s.activeBatterId||"";
  s.events.push({label,detail,meta:eventMeta, before,inning:s.inning,half:s.half,inningLabel:"第"+s.inning+"局"+(s.half==="top"?"上":"下"),time:new Date().toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit"})});
 }
 function countPitch(s,kind){
