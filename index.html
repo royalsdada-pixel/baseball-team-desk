@@ -21,7 +21,7 @@
 <div class="pitch-summary"><div><small>本局投球數</small><strong id="inningPitches">0</strong></div><div><small>累計總球數</small><strong id="scorePitchesMirror">0</strong></div><div><small>好球率</small><strong id="strikeRate">--</strong></div></div>
  <div class="action-panel">
  <div class="mode-heading"><div><small id="scoreMode">進攻模式</small><h2 id="scoreModeHint">記錄我方打者結果</h2></div><button data-action="undo" class="gold-outline">↶ 復原</button></div>
- <div id="pitcherPicker" class="pitcher-picker"><label>目前投手<select id="pitcherSelect"><option value="">未指定投手</option></select></label><small>切換投手後，後續投球會歸入該投手的個人統計。</small></div><div id="defenseActions" class="action-grid" hidden>
+ <div id="pitcherPicker" class="pitcher-picker"><label>目前投手<select id="pitcherSelect"><option value="">未指定投手</option></select></label><small>更換投手時會自動記錄局數、半局與時間；每位投手的投球數分開累計。</small><div id="pitcherHistory" class="pitcher-history"><small>尚未有投手輪替紀錄</small></div></div><div id="defenseActions" class="action-grid" hidden>
   <button data-action="ball"><strong>壞球</strong><small>BALL</small></button><button data-action="strike"><strong>好球</strong><small>STRIKE</small></button><button data-action="foul"><strong>界外球</strong><small>FOUL</small></button><button data-action="inPlay"><strong>打進場內</strong><small>IN PLAY</small></button>
   <button data-action="strikeout"><strong>三振出局</strong><small>STRIKEOUT</small></button><button data-action="walk"><strong>四壞保送</strong><small>WALK</small></button><button data-action="balk"><strong>投手犯規</strong><small>BALK</small></button><button data-action="error"><strong>失誤上壘</strong><small>ERROR</small></button>
  </div>
