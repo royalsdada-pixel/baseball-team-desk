@@ -97,3 +97,5 @@ dialog label{color:#c9b77f}
 .base-home{position:absolute;bottom:0;left:39px;color:#b9a77b;font-size:9px}
 .base-summary b{display:block;color:#d8b45a;font-size:13px}.base-summary small{display:block;color:#c1b69f;margin-top:6px}
 @media(max-width:650px){.lineup-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.base-state{padding:10px;gap:10px}}
+
+.pitcher-history{margin-top:10px;padding-top:8px;border-top:1px solid #4a4030}.pitcher-history>small{color:#a99a78;font-size:10px}.pitcher-history-row{display:flex;justify-content:space-between;gap:10px;padding:5px 0;color:#e8dfca;font-size:11px}.pitcher-history-row small{color:#a99a78;white-space:nowrap}
