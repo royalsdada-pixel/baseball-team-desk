@@ -94,7 +94,51 @@ function countPitch(s,kind){
  s.pitches++;
  s.inningPitches[s.inning]=(s.inningPitches[s.inning]||0)+1;
 }
-async function recordCatcherEvent(type){const g=currentGame();if(!g)return;const s=ensureLive(g);if(s.status==="已結束"){toast("比賽已結束");return}if(ourTeamBatting(g,s)){toast("目前是我方進攻");return}const catcherId=s.defense.C||"",pitcherId=s.activePitcherId||s.defense.P||"";if(!catcherId){toast("請先在九宮格設定捕手");return}if(type==="WP"&&!pitcherId){toast("請先指定目前投手");return}const catcher=state.players.find(p=>p.id===catcherId),pitcher=state.players.find(p=>p.id===pitcherId);const before={balls:s.balls,strikes:s.strikes,outs:s.outs,pitches:s.pitches,inningPitches:{...s.inningPitches}};const label=type==="PB"?"捕逸（PB）":"暴投（WP）";const detail=type==="PB"?"捕手 #"+catcher.number+" "+catcher.name+" 記錄捕逸":"投手 #"+(pitcher?.number||"")+" "+(pitcher?.name||"未指定")+" 暴投，捕手 #"+catcher.number+" "+catcher.name+" 面對此球";if(type==="WP"){countPitch(s,"ball");s.balls++;if(s.balls>=4){eventRecord(s,"四壞球保送",detail+"；本球為第 4 壞球",{catcherEvent:type,catcherId,pitcherId,catcherFaced:true,pitchType:"ball",wildPitch:true},before);s.balls=0;s.strikes=0;}else{eventRecord(s,label,detail+"；計入 1 壞球",{catcherEvent:type,catcherId,pitcherId,catcherFaced:true,pitchType:"ball",wildPitch:true},before);}}else{eventRecord(s,label,detail,{catcherEvent:type,catcherId,pitcherId,catcherFaced:true},before);}await saveScoring();toast(type==="PB"?"已記錄捕逸 PB":"已記錄暴投 WP，計入總球數與壞球");}
+function advanceWildPitchRunners(s,forceWalk=false){
+ const before=[...s.bases],next=[null,null,null];let runs=0;
+ if(forceWalk){
+  if(before[0]){
+   if(before[1]){
+    if(before[2])runs++;
+    next[2]=before[1];next[1]=before[0];
+   }else next[1]=before[0];
+  }else{next[1]=before[1];next[2]=before[2];}
+  next[0]=s.activeBatterId||null;
+ }else{
+  if(before[2])runs++;
+  if(before[1])next[2]=before[1];
+  if(before[0])next[1]=before[0];
+  next[0]=before[0]?null:null;
+ }
+ s.bases=next;
+ if(runs)addRuns(currentGame(),s,runs);
+ return {runs,scoredRunners:before[2]?[before[2]]:[]};
+}
+async function recordCatcherEvent(type){
+ const g=currentGame();if(!g)return;const s=ensureLive(g);
+ if(s.status==="已結束"){toast("比賽已結束");return}
+ if(ourTeamBatting(g,s)){toast("目前是我方進攻");return}
+ const catcherId=s.defense.C||"",pitcherId=s.activePitcherId||s.defense.P||"";
+ if(!catcherId){toast("請先在九宮格設定捕手");return}
+ if(type==="WP"&&!pitcherId){toast("請先指定目前投手");return}
+ const catcher=state.players.find(p=>p.id===catcherId),pitcher=state.players.find(p=>p.id===pitcherId);
+ const before={balls:s.balls,strikes:s.strikes,outs:s.outs,pitches:s.pitches,inningPitches:{...s.inningPitches}};
+ const label=type==="PB"?"捕逸（PB）":"暴投（WP）";
+ const detail=type==="PB"?"捕手 #"+catcher.number+" "+catcher.name+" 記錄捕逸":"投手 #"+(pitcher?.number||"")+" "+(pitcher?.name||"未指定")+" 暴投，捕手 #"+catcher.number+" "+catcher.name+" 面對此球";
+ if(type==="WP"){
+  countPitch(s,"ball");s.balls++;
+  const walk=s.balls>=4;
+  const runnerResult=advanceWildPitchRunners(s,walk);
+  const meta={catcherEvent:type,catcherId,pitcherId,catcherFaced:true,pitchType:"ball",wildPitch:true,wpRuns:runnerResult.runs,wpScoredRunners:runnerResult.scoredRunners,forcedWalk:walk};
+  if(walk){
+   eventRecord(s,"四壞球保送",detail+"；本球為第 4 壞球"+(runnerResult.runs?"；滿壘推進，跑者得分":"；依四壞球規則推進跑者"),meta,before);
+   s.balls=0;s.strikes=0;
+  }else eventRecord(s,label,detail+"；計入 1 壞球"+(runnerResult.runs?"；三壘跑者因暴投得分":"；壘上跑者向前推進一個壘包"),meta,before);
+ }else{
+  eventRecord(s,label,detail,{catcherEvent:type,catcherId,pitcherId,catcherFaced:true},before);
+ }
+ await saveScoring();toast(type==="PB"?"已記錄捕逸 PB":"已記錄暴投 WP、投球數與跑者推進");
+}
 async function defensePitch(type){
  const g=currentGame();if(!g)return;const s=ensureLive(g);
  if(s.status==="已結束"){toast("比賽已結束");return}
