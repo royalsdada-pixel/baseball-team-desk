@@ -123,13 +123,13 @@ function advanceRunners(s,result){
  const g=currentGame(),b=[...s.bases],next=[...b],batter=s.activeBatterId||"";
  let runs=0;
  if(result==="single"){
-  if(b[2])runs++;if(b[1])next[2]=b[1];if(b[0])next[1]=b[0];next[0]=batter;
+  next.splice(0,3,null);if(b[2])runs++;if(b[1])next[2]=b[1];if(b[0])next[1]=b[0];next[0]=batter;
  }else if(result==="double"){
-  if(b[2])runs++;if(b[1])runs++;if(b[0])next[2]=b[0];next[1]=batter;
+  next.splice(0,3,null);if(b[2])runs++;if(b[1])runs++;if(b[0])next[2]=b[0];next[1]=batter;
  }else if(result==="triple"){
-  runs=b.filter(Boolean).length;next[2]=batter;
+  next.splice(0,3,null);runs=b.filter(Boolean).length;next[2]=batter;
  }else if(result==="homerun"){
-  runs=b.filter(Boolean).length+1;
+  next.splice(0,3,null);runs=b.filter(Boolean).length+1;
  }else if(result==="walk"||result==="hbp"){
   // Only force runners when every preceding base is occupied.
   if(b[0]){
@@ -140,7 +140,7 @@ function advanceRunners(s,result){
   }
   next[0]=batter;
  }else if(result==="error"){
-  if(b[2])runs++;if(b[1])next[2]=b[1];if(b[0])next[1]=b[0];next[0]=batter;
+  next.splice(0,3,null);if(b[2])runs++;if(b[1])next[2]=b[1];if(b[0])next[1]=b[0];next[0]=batter;
  }else if(result==="out"||result==="strikeout"){
   for(let i=0;i<3;i++)next[i]=b[i];
  }
