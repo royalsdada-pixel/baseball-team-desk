@@ -263,3 +263,36 @@ function renderBatterAnalysis(){
 }
 $("battingGame").addEventListener("change",()=>{$("analysisBatter").value="";renderBatterAnalysis()});
 $("analysisBatter").addEventListener("change",renderBatterAnalysis);
+
+
+// ===== Firebase Authentication bridge =====
+const cloudLoginModal=$("cloudLoginModal");
+$("cloudLogin").addEventListener("click",()=>cloudLoginModal.showModal());
+$("cloudLoginClose").addEventListener("click",()=>cloudLoginModal.close());
+$("cloudLoginCancel").addEventListener("click",()=>cloudLoginModal.close());
+$("cloudLoginForm").addEventListener("submit",async e=>{
+ e.preventDefault();
+ const submit=$("cloudLoginSubmit"),error=$("cloudLoginError");
+ error.textContent="";submit.disabled=true;submit.textContent="登入中…";
+ try{
+  if(!window.firebaseBridge)throw new Error("Firebase 尚未載入，請確認網路連線後重新整理頁面。");
+  await window.firebaseBridge.signIn($("cloudEmail").value.trim(),$("cloudPassword").value);
+  $("cloudPassword").value="";cloudLoginModal.close();toast("雲端登入成功");
+ }catch(err){error.textContent=firebaseErrorText(err); }
+ finally{submit.disabled=false;submit.textContent="登入"}
+});
+$("cloudLogout").addEventListener("click",async()=>{
+ if(!confirm("確定要登出雲端帳號？本機資料不會刪除。"))return;
+ try{await window.firebaseBridge.signOut();toast("已登出雲端帳號")}catch(e){toast("登出失敗，請稍後再試")}
+});
+function firebaseErrorText(err){
+ const map={"auth/invalid-credential":"電子郵件或密碼不正確。","auth/too-many-requests":"嘗試次數過多，請稍後再試。","auth/network-request-failed":"網路連線失敗，請確認網路。","auth/invalid-email":"電子郵件格式不正確。"};
+ return map[err?.code]||"登入失敗："+(err?.message||"未知錯誤");
+}
+function updateCloudUI(user){
+ const status=$("cloudStatus"),login=$("cloudLogin"),logout=$("cloudLogout");
+ if(user){status.textContent="雲端："+(user.email||"已登入");login.hidden=true;logout.hidden=false;}
+ else{status.textContent="雲端：未登入";login.hidden=false;logout.hidden=true;}
+}
+window.addEventListener("firebase-auth-state",e=>updateCloudUI(e.detail.user));
+window.addEventListener("firebase-ready",()=>{if(window.firebaseBridge?.currentUser)updateCloudUI(window.firebaseBridge.currentUser);});
