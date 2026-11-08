@@ -51,3 +51,10 @@ dialog label{color:#c9b77f}
 .event-row{border-color:#393126;color:#e6dfd0}.event-row small{color:#a99a78}
 .event-panel #scoreStatus{color:#c9a44d;font-size:11px;margin-top:12px}
 @media(max-width:650px){.score-top{align-items:flex-start}.score-top h1{font-size:21px}.scoreboard{padding:12px 5px;gap:2px}.score-team strong{font-size:38px}.score-team button{padding:7px 8px;font-size:11px}.score-center b{font-size:16px}.score-center .gold-button{font-size:11px;padding:8px}.count-grid{grid-template-columns:repeat(4,1fr);gap:5px}.count-grid div{padding:10px 3px}.count-grid small{font-size:9px}.count-grid b{font-size:21px}.action-panel,.event-panel{padding:13px}.action-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.action-grid button{min-height:75px}.score-footer span{width:100%;margin:0}}
+
+.pitch-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:12px 0}
+.pitch-summary>div{background:#1b1a18;border:1px solid #4a3a22;border-radius:12px;padding:13px 16px}
+.pitch-summary small{display:block;color:#b9ad94;font-size:11px}
+.pitch-summary strong{display:block;color:#e3bd5c;font-size:25px;margin-top:4px}
+#defenseActions{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media(max-width:700px){#defenseActions{grid-template-columns:repeat(2,minmax(0,1fr))}.pitch-summary{gap:6px}.pitch-summary>div{padding:10px 8px}.pitch-summary strong{font-size:21px}.pitch-summary small{font-size:10px}}
