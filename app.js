@@ -329,9 +329,13 @@ $("cloudDownload").addEventListener("click",async()=>{
  try{
   const remote=await window.firebaseBridge.downloadWorkspace();
   if(!remote.teams.length&&!remote.players.length&&!remote.games.length){toast("雲端目前沒有資料，沒有變更本機內容");return}
-  state={teams:remote.teams,players:remote.players,games:remote.games};
-  if(cloudSyncEnabled){cloudSyncRevision=remote._revision;localStorage.setItem(syncPreferenceKey()+"-revision",String(cloudSyncRevision))}
-  await save();toast("雲端資料已下載到本機");$("cloudStatus").textContent="雲端：已同步（剛剛下載）";
+  cloudApplyingRemote=true;
+  try{
+   state={teams:remote.teams,players:remote.players,games:remote.games};
+   if(cloudSyncEnabled){cloudSyncRevision=remote._revision;localStorage.setItem(syncPreferenceKey()+"-revision",String(cloudSyncRevision))}
+   await persist();render();
+  }finally{cloudApplyingRemote=false}
+  toast("雲端資料已下載到本機");$("cloudStatus").textContent="雲端：已同步（剛剛下載）";
  }catch(err){console.error(err);toast("下載失敗："+(err.message||"請檢查 Firestore 規則"))}
  finally{b.disabled=false;b.textContent="下載雲端資料"}
 });
@@ -429,7 +433,9 @@ window.addEventListener("firebase-auth-state",e=>{
   cloudSyncEnabled=localStorage.getItem("baseball-team-desk-sync-"+user.uid)==="1";
   const saved=localStorage.getItem("baseball-team-desk-sync-"+user.uid+"-revision");
   cloudSyncRevision=saved===null?null:Number(saved);
+  $("cloudAuto").textContent=cloudSyncEnabled?"自動同步已啟用":"啟用自動同步";
+  $("cloudAuto").disabled=cloudSyncEnabled;
   if(cloudSyncEnabled&&cloudSyncRevision!==null){setCloudSyncLabel("自動同步待連線");startCloudWatch();if(navigator.onLine)scheduleCloudSync()}
- }else setCloudSyncLabel("未登入");
+ }else{$("cloudAuto").textContent="啟用自動同步";$("cloudAuto").disabled=false;setCloudSyncLabel("未登入")}
 });
 window.addEventListener("online",()=>{if(cloudSyncEnabled){startCloudWatch();scheduleCloudSync()}});
