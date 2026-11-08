@@ -296,3 +296,41 @@ function updateCloudUI(user){
 }
 window.addEventListener("firebase-auth-state",e=>updateCloudUI(e.detail.user));
 window.addEventListener("firebase-ready",()=>{if(window.firebaseBridge?.currentUser)updateCloudUI(window.firebaseBridge.currentUser);});
+
+
+// ===== Explicit cloud backup and restore =====
+function updateCloudUI(user){
+ const status=$("cloudStatus"),login=$("cloudLogin"),logout=$("cloudLogout");
+ const upload=$("cloudUpload"),download=$("cloudDownload");
+ if(user){
+  status.textContent="雲端："+(user.email||"已登入");
+  login.hidden=true;logout.hidden=false;upload.hidden=false;download.hidden=false;
+ }else{
+  status.textContent="雲端：未登入";
+  login.hidden=false;logout.hidden=true;upload.hidden=true;download.hidden=true;
+ }
+}
+window.addEventListener("firebase-auth-state",e=>updateCloudUI(e.detail.user));
+window.addEventListener("firebase-ready",()=>{if(window.firebaseBridge?.currentUser)updateCloudUI(window.firebaseBridge.currentUser);});
+$("cloudUpload").addEventListener("click",async()=>{
+ if(!window.firebaseBridge?.currentUser){toast("請先登入雲端");return}
+ const count=state.teams.length+state.players.length+state.games.length;
+ if(!count){toast("本機沒有可上傳的資料");return}
+ if(!confirm("即將以這台裝置的本機資料，完整取代雲端資料。\n球隊："+state.teams.length+"、球員："+state.players.length+"、賽事："+state.games.length+"\n請確認已先匯出 JSON 備份，確定繼續？"))return;
+ const b=$("cloudUpload");b.disabled=true;b.textContent="上傳中…";
+ try{await window.firebaseBridge.uploadWorkspace(state);toast("本機資料已上傳至雲端");$("cloudStatus").textContent="雲端：已同步（剛剛上傳）"}
+ catch(err){console.error(err);toast("上傳失敗："+(err.message||"請檢查 Firestore 規則"))}
+ finally{b.disabled=false;b.textContent="上傳本機資料"}
+});
+$("cloudDownload").addEventListener("click",async()=>{
+ if(!window.firebaseBridge?.currentUser){toast("請先登入雲端");return}
+ if(!confirm("下載會以雲端資料取代這台裝置目前的本機資料。\n建議先匯出 JSON 備份。確定繼續？"))return;
+ const b=$("cloudDownload");b.disabled=true;b.textContent="下載中…";
+ try{
+  const remote=await window.firebaseBridge.downloadWorkspace();
+  if(!remote.teams.length&&!remote.players.length&&!remote.games.length){toast("雲端目前沒有資料，沒有變更本機內容");return}
+  state={teams:remote.teams,players:remote.players,games:remote.games};
+  await save();toast("雲端資料已下載到本機");$("cloudStatus").textContent="雲端：已同步（剛剛下載）";
+ }catch(err){console.error(err);toast("下載失敗："+(err.message||"請檢查 Firestore 規則"))}
+ finally{b.disabled=false;b.textContent="下載雲端資料"}
+});
