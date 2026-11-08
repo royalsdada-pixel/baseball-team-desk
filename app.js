@@ -118,28 +118,30 @@ async function pitcherOutcome(type){
  await saveScoring();
 }
 function addRuns(g,s,n){if(!n)return;const battingAway=(g.battingOrder||"first")==="first"?s.half==="top":s.half==="bottom";if(battingAway)s.away+=n;else s.home+=n}
+function addRuns(g,s,n){if(!n)return;const battingAway=(g.battingOrder||"first")==="first"?s.half==="top":s.half==="bottom";if(battingAway)s.away+=n;else s.home+=n}
 function advanceRunners(s,result){
- const g=currentGame(),b=[...s.bases],next=[null,null,null];let runs=0;
- const steps={single:1,double:2,triple:3,homerun:4};
- if(steps[result]){
-  const move=steps[result];
-  for(let i=2;i>=0;i--)if(b[i]){const dest=i+move;if(dest>=3)runs++;else next[dest]=b[i]}
-  if(result==="homerun")runs++;
-  else if(result==="single")next[0]=s.activeBatterId||"";
-  else if(result==="double")next[1]=s.activeBatterId||"";
-  else if(result==="triple")next[2]=s.activeBatterId||"";
+ const g=currentGame(),b=[...s.bases],next=[null,null,null],batter=s.activeBatterId||"";
+ let runs=0;
+ if(result==="single"){
+  if(b[2])runs++;if(b[1])next[2]=b[1];if(b[0])next[1]=b[0];next[0]=batter;
+ }else if(result==="double"){
+  if(b[2])runs++;if(b[1])runs++;if(b[0])next[2]=b[0];next[1]=batter;
+ }else if(result==="triple"){
+  runs=b.filter(Boolean).length;next[2]=batter;
+ }else if(result==="homerun"){
+  runs=b.filter(Boolean).length+1;
  }else if(result==="walk"||result==="hbp"){
-  // Force runners forward only when the preceding bases are occupied.
-  if(b[0]){if(b[1]){if(b[2])runs++;next[2]=b[1]}else next[1]=b[1];next[1]=b[1]||null}
-  if(b[0])next[1]=b[1]||b[0];
-  else next[0]=s.activeBatterId||"";
-  if(b[1]&&b[0])next[2]=b[2]||b[1];
-  if(b[2]&&b[1]&&b[0])runs++;
+  // Only force runners when every preceding base is occupied.
+  if(b[0]){
+   if(b[1]){
+    if(b[2])runs++;
+    next[2]=b[2]||b[1];next[1]=b[0];
+   }else next[1]=b[0];
+  }
+  next[0]=batter;
  }else if(result==="error"){
-  for(let i=2;i>=0;i--)if(b[i]){if(i===2)runs++;else next[i+1]=b[i]}
-  next[0]=s.activeBatterId||"";
+  if(b[2])runs++;if(b[1])next[2]=b[1];if(b[0])next[1]=b[0];next[0]=batter;
  }else if(result==="out"||result==="strikeout"){
-  // Batter is out; existing runners hold their bases.
   for(let i=0;i<3;i++)next[i]=b[i];
  }
  s.bases=next;if(g)addRuns(g,s,runs);
@@ -162,7 +164,7 @@ async function adjustScore(side,delta){const g=currentGame();if(!g)return;const 
 async function nextHalf(){
  const g=currentGame();if(!g)return;const s=ensureLive(g);
  if(s.half==="top")s.half="bottom";else{s.half="top";s.inning++}
- s.balls=0;s.strikes=0;s.outs=0;await saveScoring();
+ s.balls=0;s.strikes=0;s.outs=0;s.bases=[null,null,null];await saveScoring();
 }
 async function undoScoring(){
  const g=currentGame();if(!g)return;const s=ensureLive(g);
