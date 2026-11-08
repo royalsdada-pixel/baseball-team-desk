@@ -117,3 +117,5 @@ dialog label{color:#c9b77f}
 
 /* catcher-specific statistics */
 #catcherContent .analysis-metrics{grid-template-columns:repeat(4,minmax(0,1fr))}#catcherContent .analysis-note{line-height:1.7}@media(max-width:650px){#catcherContent .analysis-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+.runner-tools{border:1px solid #5b4827;border-radius:14px;padding:14px;margin:12px 0;background:rgba(201,160,70,.06)}.runner-tools>b{display:block;color:#d6ad52;margin-bottom:10px}.runner-tool-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}.runner-tool-fields label{display:flex;flex-direction:column;gap:5px;font-size:13px}.runner-tool-fields select{min-width:0}.runner-tool-buttons{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:10px 0}.runner-tool-buttons button{min-height:42px}@media(max-width:600px){.runner-tool-fields{grid-template-columns:1fr}.runner-tool-buttons{grid-template-columns:1fr 1fr}}
