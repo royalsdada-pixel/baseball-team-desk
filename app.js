@@ -40,7 +40,7 @@ function ensureLive(g){
  if(!g.live)g.live={inning:1,half:"top",balls:0,strikes:0,outs:0,home:0,away:0,pitches:0,inningPitches:{},events:[],status:"進行中"};
  const s=g.live;
  s.inning=s.inning||1;s.half=s.half||"top";s.balls=s.balls||0;s.strikes=s.strikes||0;s.outs=s.outs||0;
- s.away=s.away||0;s.home=s.home||0;s.pitches=s.pitches||0;s.inningPitches=s.inningPitches||{};s.events=s.events||[];s.bases=s.bases||[null,null,null];s.lineup=s.lineup||Array(9).fill("");s.lineupIndex=Number.isInteger(s.lineupIndex)?s.lineupIndex:0;
+ s.away=s.away||0;s.home=s.home||0;s.pitches=s.pitches||0;s.inningPitches=s.inningPitches||{};s.events=s.events||[];s.bases=s.bases||[null,null,null];s.lineup=s.lineup||Array(9).fill("");s.lineupIndex=Number.isInteger(s.lineupIndex)?s.lineupIndex:0;s.lineupPositions=s.lineupPositions||Array(9).fill("");s.substitutions=s.substitutions||[];
  return s;
 }
 function ourTeamBatting(g,s){return (s.half==="top" && (g.battingOrder||"first")==="first") || (s.half==="bottom" && (g.battingOrder||"first")==="second")}
@@ -62,7 +62,9 @@ function renderScoring(){
  pitcherSelect.value=s.activePitcherId||"";
  const pitcherChanges=s.events.filter(e=>e.meta?.pitcherChange).slice(-5).reverse();
  $("pitcherHistory").innerHTML=pitcherChanges.length?pitcherChanges.map(e=>'<div class="pitcher-history-row"><b>'+esc(e.detail)+'</b><small>'+esc(e.inningLabel)+'・'+esc(e.time)+'</small></div>').join(""):'<small>尚未有投手輪替紀錄</small>';
- for(let i=0;i<9;i++){const sel=$("lineup"+(i+1)),old=s.lineup[i]||"";sel.innerHTML='<option value="">未設定</option>'+roster.map(p=>'<option value="'+p.id+'">#'+esc(p.number)+' '+esc(p.name)+'</option>').join("");sel.value=old}
+ for(let i=0;i<9;i++){const sel=$("lineup"+(i+1)),old=s.lineup[i]||"";sel.innerHTML='<option value="">未設定</option>'+roster.map(p=>'<option value="'+p.id+'">#'+esc(p.number)+' '+esc(p.name)+'</option>').join("");sel.value=old;const pos=s.lineupPositions[i]||"";sel.title=pos?"守備位置："+pos:"尚未設定守備位置"}
+ const subSlot=$("subSlot"),subPlayer=$("subPlayer"),subPosition=$("subPosition");if(subSlot&&subPlayer&&subPosition){const slot=Number(subSlot.value||1)-1;subPlayer.innerHTML='<option value="">選擇替補球員</option>'+roster.filter(p=>!s.lineup.includes(p.id)||p.id===s.lineup[slot]).map(p=>'<option value="'+p.id+'">#'+esc(p.number)+' '+esc(p.name)+'</option>').join("");subPosition.value=s.lineupPositions[slot]||"";const current=s.lineup[slot];subPlayer.value=subPlayer.querySelector('option[value="'+CSS.escape(current||"") +'"]')?current:""}
+ $("subHistory").innerHTML=s.substitutions.length?[...s.substitutions].reverse().map(x=>{const from=state.players.find(p=>p.id===x.fromPlayerId),to=state.players.find(p=>p.id===x.toPlayerId);return '<div class="pitcher-history-row"><b>'+esc(x.slot+'棒：'+(from?from.name:"未設定")+' → '+(to?to.name:"未知球員"))+'</b><small>'+esc(x.inningLabel+'・'+(x.position||"守備位置未指定"))+'</small></div>'}).join(""):'<small>尚無替補紀錄</small>';
  const lineupId=s.lineup[s.lineupIndex]||s.activeBatterId||"";
  if(lineupId)s.activeBatterId=lineupId;
  const batterSelect=$("batterSelect");batterSelect.innerHTML='<option value="">未指定打者</option>'+roster.map(p=>'<option value="'+p.id+'">#'+esc(p.number)+' '+esc(p.name)+'</option>').join("");batterSelect.value=s.activeBatterId||"";
@@ -76,7 +78,7 @@ function renderScoring(){
 }
 async function saveScoring(){await persist();renderScoring();scheduleCloudSync()}
 function eventRecord(s,label,detail="",meta={},beforeOverride=null){
- const before={balls:s.balls,strikes:s.strikes,outs:s.outs,pitches:s.pitches,inningPitches:{...s.inningPitches},bases:[...s.bases],away:s.away,home:s.home,lineupIndex:s.lineupIndex,activePitcherId:s.activePitcherId||"",...(beforeOverride||{})};
+ const before={balls:s.balls,strikes:s.strikes,outs:s.outs,pitches:s.pitches,inningPitches:{...s.inningPitches},bases:[...s.bases],away:s.away,home:s.home,lineupIndex:s.lineupIndex,lineup:[...s.lineup],lineupPositions:[...s.lineupPositions],substitutions:[...s.substitutions],activeBatterId:s.activeBatterId||"",activePitcherId:s.activePitcherId||"",...(beforeOverride||{})};
  const eventMeta={...meta};if(meta.pitchType||meta.outcome)eventMeta.pitcherId=s.activePitcherId||"";if(meta.batterOutcome)eventMeta.batterId=s.activeBatterId||"";if(meta.batterOutcome)eventMeta.batterId=s.activeBatterId||"";
  s.events.push({label,detail,meta:eventMeta, before,inning:s.inning,half:s.half,inningLabel:"第"+s.inning+"局"+(s.half==="top"?"上":"下"),time:new Date().toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit"})});
 }
@@ -173,7 +175,7 @@ async function undoScoring(){
  const g=currentGame();if(!g)return;const s=ensureLive(g);
  if(!s.events.length){toast("目前沒有紀錄");return}
  const last=s.events.pop();
- if(last.before){s.balls=last.before.balls;s.strikes=last.before.strikes;s.outs=last.before.outs;s.pitches=last.before.pitches;s.inningPitches={...last.before.inningPitches};s.bases=[...(last.before.bases||[null,null,null])];s.away=last.before.away??s.away;s.home=last.before.home??s.home;s.lineupIndex=last.before.lineupIndex??s.lineupIndex;s.activePitcherId=last.before.activePitcherId??s.activePitcherId}
+ if(last.before){s.balls=last.before.balls;s.strikes=last.before.strikes;s.outs=last.before.outs;s.pitches=last.before.pitches;s.inningPitches={...last.before.inningPitches};s.bases=[...(last.before.bases||[null,null,null])];s.away=last.before.away??s.away;s.home=last.before.home??s.home;s.lineupIndex=last.before.lineupIndex??s.lineupIndex;if(last.before.lineup)s.lineup=[...last.before.lineup];if(last.before.lineupPositions)s.lineupPositions=[...last.before.lineupPositions];if(last.before.substitutions)s.substitutions=[...last.before.substitutions];s.activeBatterId=last.before.activeBatterId??s.activeBatterId;s.activePitcherId=last.before.activePitcherId??s.activePitcherId}
  else {if(["壞球","好球","界外球"].includes(last.label))s.pitches=Math.max(0,s.pitches-1);s.balls=0;s.strikes=0}
  await saveScoring();
 }
@@ -187,6 +189,8 @@ $("pitcherSelect").addEventListener("change",async e=>{
  await persist();scheduleCloudSync();renderScoring();toast(nextId?"投手輪替已記錄":"已取消目前投手");
 });
 $("batterSelect").addEventListener("change",async e=>{const g=currentGame();if(!g)return;ensureLive(g).activeBatterId=e.target.value;await persist();scheduleCloudSync();toast(e.target.value?"已切換目前打者":"目前打者設為未指定")});
+$("subSlot").addEventListener("change",()=>renderScoring());
+$("substituteBtn").addEventListener("click",async()=>{const g=currentGame();if(!g)return;const s=ensureLive(g),slot=Number($("subSlot").value)-1,nextId=$("subPlayer").value,position=$("subPosition").value,previousId=s.lineup[slot]||"";if(!nextId){toast("請先選擇替補球員");return}if(nextId===previousId){toast("替補球員與原球員相同");return}if(s.lineup.some((id,i)=>i!==slot&&id===nextId)){toast("這位球員已在其他棒次，不能重複排入");return}const from=state.players.find(p=>p.id===previousId),to=state.players.find(p=>p.id===nextId),label=(p)=>p?"#"+p.number+" "+p.name:"未設定";const record={slot:slot+1,fromPlayerId:previousId,toPlayerId:nextId,position,inning:s.inning,half:s.half,inningLabel:"第"+s.inning+"局"+(s.half==="top"?"上":"下"),time:new Date().toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit"})};eventRecord(s,"球員替補",record.slot+" 棒："+label(from)+" → "+label(to)+(position?"（"+position+"）":""),{substitution:true,...record});s.substitutions.push(record);s.lineup[slot]=nextId;s.lineupPositions[slot]=position;if(s.lineupIndex===slot)s.activeBatterId=nextId;if(s.activePitcherId===previousId&&position==="投手")s.activePitcherId=nextId;else if(s.activePitcherId===previousId)s.activePitcherId="";await saveScoring();toast("替補完成，歷史紀錄已保留")});
 for(let i=0;i<9;i++)$("lineup"+(i+1)).addEventListener("change",async e=>{const g=currentGame();if(!g)return;const s=ensureLive(g);s.lineup[i]=e.target.value;if(i===s.lineupIndex)s.activeBatterId=e.target.value;await persist();scheduleCloudSync();renderScoring();toast("第 "+(i+1)+" 棒已更新")});
 $("gameList").addEventListener("click",e=>{const b=e.target.closest("[data-score]");if(b)showScoring(b.dataset.score)});
 $("scorePage").addEventListener("click",async e=>{
