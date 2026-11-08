@@ -120,7 +120,7 @@ async function pitcherOutcome(type){
 function addRuns(g,s,n){if(!n)return;const battingAway=(g.battingOrder||"first")==="first"?s.half==="top":s.half==="bottom";if(battingAway)s.away+=n;else s.home+=n}
 function addRuns(g,s,n){if(!n)return;const battingAway=(g.battingOrder||"first")==="first"?s.half==="top":s.half==="bottom";if(battingAway)s.away+=n;else s.home+=n}
 function advanceRunners(s,result){
- const g=currentGame(),b=[...s.bases],next=[null,null,null],batter=s.activeBatterId||"";
+ const g=currentGame(),b=[...s.bases],next=[...b],batter=s.activeBatterId||"";
  let runs=0;
  if(result==="single"){
   if(b[2])runs++;if(b[1])next[2]=b[1];if(b[0])next[1]=b[0];next[0]=batter;
@@ -135,7 +135,7 @@ function advanceRunners(s,result){
   if(b[0]){
    if(b[1]){
     if(b[2])runs++;
-    next[2]=b[2]||b[1];next[1]=b[0];
+    next[2]=b[1];next[1]=b[0];
    }else next[1]=b[0];
   }
   next[0]=batter;
