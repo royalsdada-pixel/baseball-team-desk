@@ -165,11 +165,11 @@ async function recordPitcherResult(type){
  const g=currentGame();if(!g)return;const s=ensureLive(g);
  if(s.status==="已結束"){toast("比賽已結束");return}
  if(ourTeamBatting(g,s)){toast("目前是我方進攻");return}
- const labels={pitchSingle:"對方一壘安打",pitchDouble:"對方二壘安打",pitchTriple:"對方三壘安打",pitchHomerun:"對方全壘打",pitchGroundout:"對方內野出局"};
+ const labels={pitchSingle:"對方一壘安打",pitchInfieldHit:"對方內野安打",pitchDouble:"對方二壘安打",pitchTriple:"對方三壘安打",pitchHomerun:"對方全壘打",pitchGroundout:"對方內野出局"};
  const before={balls:s.balls,strikes:s.strikes,outs:s.outs,pitches:s.pitches,inningPitches:{...s.inningPitches}};
  countPitch(s,"inPlay");
  const bases=[...s.bases],next=[null,null,null];let runs=0;
- if(type==="pitchSingle"){
+ if(type==="pitchSingle"||type==="pitchInfieldHit"){
   if(bases[2])runs++;if(bases[1])next[2]=bases[1];if(bases[0])next[1]=bases[0];next[0]="opponent-batter-"+(s.events.length+1);
  }else if(type==="pitchDouble"){
   if(bases[2])runs++;if(bases[1])runs++;if(bases[0])next[2]=bases[0];next[1]="opponent-batter-"+(s.events.length+1);
@@ -287,7 +287,7 @@ $("scorePage").addEventListener("click",async e=>{
  if(a==="awayPlus"){await adjustScore("away",1);return}if(a==="awayMinus"){await adjustScore("away",-1);return}
  if(a==="homePlus"){await adjustScore("home",1);return}if(a==="homeMinus"){await adjustScore("home",-1);return}
  if(["ball","strike","foul"].includes(a)){await defensePitch(a);return}
- if(["pitchSingle","pitchDouble","pitchTriple","pitchHomerun","pitchGroundout"].includes(a)){await recordPitcherResult(a);return}
+ if(["pitchSingle","pitchInfieldHit","pitchDouble","pitchTriple","pitchHomerun","pitchGroundout"].includes(a)){await recordPitcherResult(a);return}
  const g=currentGame();if(["walk","error"].includes(a)){if(g&&ourTeamBatting(g,ensureLive(g)))await offenseResult(a);else await pitcherOutcome(a);return}
  if(a==="strikeout"){if(g&&ourTeamBatting(g,ensureLive(g)))await offenseResult(a);else await pitcherOutcome(a);return}
  if(a==="balk"){await pitcherOutcome(a);return}
