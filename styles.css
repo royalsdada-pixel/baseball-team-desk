@@ -58,3 +58,24 @@ dialog label{color:#c9b77f}
 .pitch-summary strong{display:block;color:#e3bd5c;font-size:25px;margin-top:4px}
 #defenseActions{grid-template-columns:repeat(4,minmax(0,1fr))}
 @media(max-width:700px){#defenseActions{grid-template-columns:repeat(2,minmax(0,1fr))}.pitch-summary{gap:6px}.pitch-summary>div{padding:10px 8px}.pitch-summary strong{font-size:21px}.pitch-summary small{font-size:10px}}
+
+.pitcher-picker{margin:0 0 12px;padding:13px 15px;background:#211e18;border:1px solid #594725;border-radius:11px}
+.pitcher-picker label,.analysis-filter label{display:block;color:#d6bd7c;font-size:12px;font-weight:700}
+.pitcher-picker select,.analysis-filter select{display:block;margin-top:7px;max-width:420px;background:#111;color:#eee;border-color:#5a4828}
+.pitcher-picker small{display:block;color:#a99a78;font-size:11px;margin-top:7px}
+.analysis-filter{display:flex;gap:12px;flex-wrap:wrap;margin:14px 0 18px;padding:15px;background:#191817;border:1px solid #3c3324;border-radius:13px}
+.analysis-filter label{flex:1;min-width:220px}
+.analysis-card{background:#191817;border:1px solid #4a3a22;border-radius:14px;padding:18px;margin:12px 0}
+.analysis-card-head{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #423723;padding-bottom:12px}
+.analysis-card-head h2{font-size:18px;margin:0;color:#f0d58c}
+.analysis-card-head span{color:#d8b45a;font-weight:800}
+.analysis-metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin:14px 0}
+.analysis-metrics>div{background:#24211b;border-radius:9px;padding:11px}
+.analysis-metrics small{display:block;color:#b9ad94;font-size:10px}
+.analysis-metrics strong{display:block;color:#e3bd5c;font-size:23px;margin-top:5px}
+.analysis-table-wrap{overflow-x:auto}
+.analysis-table{min-width:620px;width:100%;border-collapse:collapse}
+.analysis-table th,.analysis-table td{background:transparent;color:#d9d0bc;border-bottom:1px solid #393126;padding:10px;text-align:center}
+.analysis-table th{color:#c9a44d;font-size:11px}
+.analysis-note{color:#a99a78;font-size:12px}
+@media(max-width:650px){.analysis-metrics{grid-template-columns:repeat(2,1fr)}.analysis-filter{display:block}.analysis-filter label{margin:8px 0}}
