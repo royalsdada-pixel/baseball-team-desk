@@ -102,17 +102,17 @@ function autoChangeHalfIfThreeOuts(s){
  s._autoHalfNotice="第 "+endedInning+" 局"+(endedHalf==="top"?"上":"下")+"半局三出局，已自動換"+(endedHalf==="top"?"到下半局":"局");
  return true;
 }
-function attachRunRecords(s,scorers,fallbackPitcherId){
+function attachRunRecords(s,scorers,fallbackPitcherId,forcedReason=null){
  if(!scorers||!scorers.length)return [];
  s.runnerPitcherMap=s.runnerPitcherMap||{};
  s.runRecordSeq=(s.runRecordSeq||0);
  const inningEvents=s.events.filter(e=>e.inning===s.inning&&e.half===s.half);
  const priorDefensiveError=inningEvents.some(e=>e.meta?.outcome==="error"||e.meta?.fieldingError);
  const priorPassedBall=inningEvents.some(e=>e.meta?.catcherEvent==="PB"||e.meta?.passedBallAdvance);
- const autoEarned=!(priorDefensiveError||priorPassedBall);
+ const autoEarned=forcedReason==="PB"?false:forcedReason==="WP"?true:!(priorDefensiveError||priorPassedBall);
  return scorers.map((runnerId,index)=>{
   const pitcherId=s.runnerPitcherMap[runnerId]||fallbackPitcherId||s.activePitcherId||"";
-  const record={id:"run-"+(++s.runRecordSeq),runnerId,pitcherId,earned:autoEarned,autoEarned,reviewed:false,inning:s.inning,half:s.half,reason:priorDefensiveError?"本半局曾有守備失誤，待覆核":priorPassedBall?"本半局曾有捕逸，待覆核":"依目前事件初判自責分"};
+  const record={id:"run-"+(++s.runRecordSeq),runnerId,pitcherId,earned:autoEarned,autoEarned,reviewed:false,inning:s.inning,half:s.half,reason:forcedReason==="PB"?"捕逸進壘得分，初判非自責分":forcedReason==="WP"?"暴投進壘得分，初判自責分":priorDefensiveError?"本半局曾有守備失誤，待覆核":priorPassedBall?"本半局曾有捕逸，待覆核":"依目前事件初判自責分"};
   return record;
  });
 }
@@ -212,7 +212,7 @@ async function recordManualRunnerEvent(action){
  if(action==="runnerSteal"){meta.stolenBaseAttempt=true;meta.stolenBase=true}
  if(action==="runnerWP")meta.wildPitchAdvance=true;
  if(action==="runnerPB")meta.passedBallAdvance=true;
- if(to===4)meta.runRecords=attachRunRecords(s,[runnerId],s.activePitcherId||"");
+ if(to===4)meta.runRecords=attachRunRecords(s,[runnerId],s.activePitcherId||"",action==="runnerPB"?"PB":action==="runnerWP"?"WP":null);
  eventRecord(s,reason,runnerName+" 從"+baseName(from)+"前進至"+baseName(to)+(to===4?"，跑者得分":""),meta,before);
  await saveScoring();toast(reason+"已記錄"+(to===4?"，比分已更新":""));
 }
