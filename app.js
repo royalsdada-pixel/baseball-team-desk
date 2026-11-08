@@ -77,6 +77,10 @@ function renderScoring(){
  const batterSelect=$("batterSelect");batterSelect.innerHTML='<option value="">未指定打者</option>'+roster.map(p=>'<option value="'+p.id+'">#'+esc(p.number)+' '+esc(p.name)+'</option>').join("");batterSelect.value=s.activeBatterId||"";
  const bases=s.bases;$("base1").classList.toggle("occupied",!!bases[0]);$("base2").classList.toggle("occupied",!!bases[1]);$("base3").classList.toggle("occupied",!!bases[2]);
  $("baseText").textContent=bases.some(Boolean)?["一壘","二壘","三壘"].filter((_,i)=>bases[i]).join("、")+"有人":"目前無人在壘";
+ const runnerSelect=$("runnerSelect"),oldRunner=runnerSelect.value;
+ runnerSelect.innerHTML='<option value="">選擇壘上跑者</option>'+bases.map((id,i)=>id?'<option value="'+i+'">'+["一壘","二壘","三壘"][i]+'跑者'+(state.players.find(p=>p.id===id)?'・'+esc(state.players.find(p=>p.id===id).name):"")+'</option>':"").join("");
+ if([...runnerSelect.options].some(o=>o.value===oldRunner))runnerSelect.value=oldRunner;
+ const dest=$("runnerDestination");if(dest)dest.disabled=!bases.some(Boolean);
  $("scoreMode").textContent=batting?"進攻模式":"守備模式";
  $("scoreModeHint").textContent=batting?"記錄我方打者結果":"記錄投手投球結果";
  $("defenseActions").hidden=batting;$("offenseActions").hidden=!batting;
@@ -168,6 +172,33 @@ async function defensePitch(type){
   eventRecord(s,"打進場內","擊球進入場內，計入投球與好球率",{pitchType:type},before);
  }
  await saveScoring();
+}
+async function recordManualRunnerEvent(action){
+ const g=currentGame();if(!g)return;const s=ensureLive(g);
+ if(s.status==="已結束"){toast("比賽已結束");return}
+ const index=Number($("runnerSelect").value),destination=$("runnerDestination").value;
+ if(!Number.isInteger(index)||index<0||index>2||!s.bases[index]){toast("請先選擇壘上跑者");return}
+ const runnerId=s.bases[index],from=index+1,to=destination==="home"?4:Number(destination);
+ if(to!==4&&to<=from){toast("目標壘包必須在跑者前方");return}
+ if(to!==4&&s.bases[to-1]&&to-1!==index){toast("目標壘包已有跑者，請先處理前方跑者");return}
+ const runner=state.players.find(p=>p.id===runnerId),runnerName=runner?"#"+runner.number+" "+runner.name:"跑者";
+ const before={balls:s.balls,strikes:s.strikes,outs:s.outs,pitches:s.pitches,inningPitches:{...s.inningPitches}};
+ const reason={runnerSteal:"盜壘成功",runnerWP:"暴投（WP）進壘",runnerPB:"捕逸（PB）進壘",runnerCaught:"盜壘失敗／阻殺"}[action];
+ const baseName=n=>n===4?"本壘":n+"壘";
+ if(action==="runnerCaught"){
+  s.bases[index]=null;s.outs=Math.min(3,s.outs+1);
+  eventRecord(s,reason,runnerName+" 從"+baseName(from)+"遭觸殺出局",{stolenBaseAttempt:true,caughtStealing:true,runnerId,fromBase:from},before);
+  const changed=autoChangeHalfIfThreeOuts(s);
+  await saveScoring();toast(changed?"盜壘失敗，三出局！已自動換局":"已記錄盜壘失敗／阻殺");return;
+ }
+ s.bases[index]=null;
+ if(to===4)addRuns(g,s,1);else s.bases[to-1]=runnerId;
+ const meta={runnerId,fromBase:from,toBase:to,manualAdvance:true};
+ if(action==="runnerSteal"){meta.stolenBaseAttempt=true;meta.stolenBase=true}
+ if(action==="runnerWP")meta.wildPitchAdvance=true;
+ if(action==="runnerPB")meta.passedBallAdvance=true;
+ eventRecord(s,reason,runnerName+" 從"+baseName(from)+"前進至"+baseName(to)+(to===4?"，跑者得分":""),meta,before);
+ await saveScoring();toast(reason+"已記錄"+(to===4?"，比分已更新":""));
 }
 async function recordPitcherResult(type){
  const g=currentGame();if(!g)return;const s=ensureLive(g);
@@ -301,6 +332,7 @@ $("scorePage").addEventListener("click",async e=>{
  if(a==="strikeout"){if(g&&ourTeamBatting(g,ensureLive(g)))await offenseResult(a);else await pitcherOutcome(a);return}
  if(a==="balk"){await pitcherOutcome(a);return}
  if(a==="catcherPB"||a==="catcherWP"){await recordCatcherEvent(a==="catcherPB"?"PB":"WP");return}
+ if(["runnerSteal","runnerWP","runnerPB","runnerCaught"].includes(a)){await recordManualRunnerEvent(a);return}
  if(["single","double","triple","homerun","hbp","out"].includes(a))await offenseResult(a);
 });
 
