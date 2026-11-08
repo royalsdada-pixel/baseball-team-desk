@@ -4,7 +4,7 @@ function read(){return new Promise((ok,no)=>{let r=db.transaction("data").object
 function persist(){return new Promise((ok,no)=>{let t=db.transaction("data","readwrite");t.objectStore("data").put(state,"state");t.oncomplete=ok;t.onerror=()=>no(t.error)})}
 function toast(s){$("toast").textContent=s;$("toast").classList.add("show");clearTimeout(timer);timer=setTimeout(()=>$("toast").classList.remove("show"),2200)}
 function team(id){return state.teams.find(x=>x.id===id)?.name||"未知球隊"}
-async function save(){await persist();$("saveState").textContent="本機資料已儲存";render()}
+async function save(){await persist();$("saveState").textContent="本機資料已儲存";render();scheduleCloudSync()}
 function go(id){document.querySelectorAll(".page").forEach(x=>x.classList.toggle("active",x.id===id));document.querySelectorAll(".nav").forEach(x=>x.classList.toggle("active",x.dataset.page===id));if(id==="players")teamOptions("playerTeam");if(id==="games")teamOptions("gameTeam");if(id==="pitchAnalysis")renderPitchAnalysis();if(id==="batterAnalysis")renderBatterAnalysis()}
 document.querySelectorAll(".nav").forEach(x=>x.onclick=()=>go(x.dataset.page));document.querySelectorAll(".close").forEach(x=>x.onclick=()=>x.closest("dialog").close());
 function teamOptions(id){let s=$(id),old=s.value;s.innerHTML=state.teams.map(t=>'<option value="'+t.id+'">'+esc(t.name)+'</option>').join("");if(state.teams.some(t=>t.id===old))s.value=old;if(id==="playerTeam")$("filterTeam").innerHTML='<option value="">所有球隊</option>'+state.teams.map(t=>'<option value="'+t.id+'">'+esc(t.name)+'</option>').join("")}
@@ -73,7 +73,7 @@ function renderScoring(){
  $("scoreEvents").innerHTML=s.events.length?[...s.events].reverse().slice(0,24).map(e=>'<div class="event-row"><span><b>'+esc(e.label)+'</b><small>'+esc(e.inningLabel)+'・'+esc(e.time)+'</small></span><span>'+esc(e.detail||"")+'</span></div>').join(""):'<div class="empty">尚無紀錄</div>';
  $("scoreStatus").textContent=s.status;$("scoreSaved").textContent="資料自動儲存";
 }
-async function saveScoring(){await persist();renderScoring()}
+async function saveScoring(){await persist();renderScoring();scheduleCloudSync()}
 function eventRecord(s,label,detail="",meta={},beforeOverride=null){
  const before={balls:s.balls,strikes:s.strikes,outs:s.outs,pitches:s.pitches,inningPitches:{...s.inningPitches},bases:[...s.bases],away:s.away,home:s.home,lineupIndex:s.lineupIndex,activePitcherId:s.activePitcherId||"",...(beforeOverride||{})};
  const eventMeta={...meta};if(meta.pitchType||meta.outcome)eventMeta.pitcherId=s.activePitcherId||"";if(meta.batterOutcome)eventMeta.batterId=s.activeBatterId||"";if(meta.batterOutcome)eventMeta.batterId=s.activeBatterId||"";
@@ -183,10 +183,10 @@ $("pitcherSelect").addEventListener("change",async e=>{
  const detail=(previousId?playerName(previousId):"尚未指定投手")+" → "+(nextId?playerName(nextId):"未指定投手");
  eventRecord(s,nextId?"投手登板／更換":"投手取消指定",detail,{pitcherChange:true,fromPitcherId:previousId,toPitcherId:nextId});
  s.activePitcherId=nextId;
- await persist();renderScoring();toast(nextId?"投手輪替已記錄":"已取消目前投手");
+ await persist();scheduleCloudSync();renderScoring();toast(nextId?"投手輪替已記錄":"已取消目前投手");
 });
-$("batterSelect").addEventListener("change",async e=>{const g=currentGame();if(!g)return;ensureLive(g).activeBatterId=e.target.value;await persist();toast(e.target.value?"已切換目前打者":"目前打者設為未指定")});
-for(let i=0;i<9;i++)$("lineup"+(i+1)).addEventListener("change",async e=>{const g=currentGame();if(!g)return;const s=ensureLive(g);s.lineup[i]=e.target.value;if(i===s.lineupIndex)s.activeBatterId=e.target.value;await persist();renderScoring();toast("第 "+(i+1)+" 棒已更新")});
+$("batterSelect").addEventListener("change",async e=>{const g=currentGame();if(!g)return;ensureLive(g).activeBatterId=e.target.value;await persist();scheduleCloudSync();toast(e.target.value?"已切換目前打者":"目前打者設為未指定")});
+for(let i=0;i<9;i++)$("lineup"+(i+1)).addEventListener("change",async e=>{const g=currentGame();if(!g)return;const s=ensureLive(g);s.lineup[i]=e.target.value;if(i===s.lineupIndex)s.activeBatterId=e.target.value;await persist();scheduleCloudSync();renderScoring();toast("第 "+(i+1)+" 棒已更新")});
 $("gameList").addEventListener("click",e=>{const b=e.target.closest("[data-score]");if(b)showScoring(b.dataset.score)});
 $("scorePage").addEventListener("click",async e=>{
  const b=e.target.closest("[data-action]");if(!b)return;const a=b.dataset.action;
@@ -334,3 +334,58 @@ $("cloudDownload").addEventListener("click",async()=>{
  }catch(err){console.error(err);toast("下載失敗："+(err.message||"請檢查 Firestore 規則"))}
  finally{b.disabled=false;b.textContent="下載雲端資料"}
 });
+
+
+// ===== Guarded automatic sync =====
+let cloudSyncRevision=null,cloudSyncTimer=null,cloudSyncBusy=false,cloudSyncEnabled=false;
+function setCloudSyncLabel(message){const el=$("cloudStatus");if(el&&window.firebaseBridge?.currentUser)el.textContent="雲端："+message}
+function syncPreferenceKey(){return "baseball-team-desk-sync-"+(window.firebaseBridge?.currentUser?.uid||"")}
+async function activateCloudSync(){
+ const user=window.firebaseBridge?.currentUser;if(!user)return;
+ const remote=await window.firebaseBridge.downloadWorkspace();
+ if(remote._revision===0){
+   const rev=await window.firebaseBridge.uploadWorkspace(state,0);
+   cloudSyncRevision=rev;
+ }else{
+   // Do not silently overwrite a cloud workspace when enabling sync.
+   const same=JSON.stringify({teams:state.teams,players:state.players,games:state.games})===JSON.stringify({teams:remote.teams,players:remote.players,games:remote.games});
+   if(!same)throw new Error("本機與雲端資料目前不同。請先選擇下載雲端資料或手動上傳本機資料，確認一致後再啟用自動同步。");
+   cloudSyncRevision=remote._revision;
+ }
+ cloudSyncEnabled=true;localStorage.setItem(syncPreferenceKey(),"1");localStorage.setItem(syncPreferenceKey()+"-revision",String(cloudSyncRevision));
+ $("cloudAuto").textContent="自動同步已啟用";$("cloudAuto").disabled=true;
+ setCloudSyncLabel("自動同步已啟用");toast("自動同步已啟用");
+}
+async function pushCloudChanges(){
+ if(!cloudSyncEnabled||cloudSyncBusy||!navigator.onLine||!window.firebaseBridge?.currentUser)return;
+ cloudSyncBusy=true;setCloudSyncLabel("同步中…");
+ try{
+  const rev=await window.firebaseBridge.uploadWorkspace(state,cloudSyncRevision);
+  cloudSyncRevision=rev;localStorage.setItem(syncPreferenceKey()+"-revision",String(rev));
+  setCloudSyncLabel("已同步");
+ }catch(err){
+  console.error(err);cloudSyncEnabled=false;localStorage.removeItem(syncPreferenceKey());
+  $("cloudAuto").disabled=false;$("cloudAuto").textContent="重新啟用自動同步";
+  setCloudSyncLabel("同步暫停，需處理衝突");toast(err.message||"雲端同步失敗");
+ }finally{cloudSyncBusy=false}
+}
+function scheduleCloudSync(){
+ if(!cloudSyncEnabled||!window.firebaseBridge?.currentUser)return;
+ clearTimeout(cloudSyncTimer);cloudSyncTimer=setTimeout(pushCloudChanges,1200);
+}
+$("cloudAuto").addEventListener("click",async()=>{
+ const b=$("cloudAuto");b.disabled=true;b.textContent="檢查雲端資料…";
+ try{await activateCloudSync()}catch(e){toast(e.message||"啟用自動同步失敗");b.disabled=false;b.textContent="啟用自動同步"}
+});
+window.addEventListener("firebase-auth-state",e=>{
+ cloudSyncEnabled=false;cloudSyncRevision=null;
+ const user=e.detail.user;
+ $("cloudAuto").hidden=!user;
+ if(user){
+  cloudSyncEnabled=localStorage.getItem("baseball-team-desk-sync-"+user.uid)==="1";
+  const saved=localStorage.getItem("baseball-team-desk-sync-"+user.uid+"-revision");
+  cloudSyncRevision=saved===null?null:Number(saved);
+  if(cloudSyncEnabled&&cloudSyncRevision!==null){setCloudSyncLabel("自動同步待連線");if(navigator.onLine)scheduleCloudSync()}
+ }else setCloudSyncLabel("未登入");
+});
+window.addEventListener("online",()=>{if(cloudSyncEnabled)scheduleCloudSync()});
