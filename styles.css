@@ -103,3 +103,5 @@ dialog label{color:#c9b77f}
 #cloudStatus{font-size:11px;color:#d6f0df}#cloudLogin[hidden],#cloudLogout[hidden]{display:none}.cloud-error{color:#b84e45;font-size:12px;min-height:18px}@media(max-width:700px){.head-actions{flex-wrap:wrap;justify-content:flex-end}.head-actions span{font-size:10px}}
 
 #cloudAuto[hidden]{display:none}#cloudAuto:disabled{opacity:.7;cursor:default}
+
+.substitution-tools{margin-top:14px;padding:13px;background:#211e18;border:1px solid #594725;border-radius:10px}.substitution-tools h3{margin:0 0 10px;color:#e2bd61;font-size:14px}.substitution-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-bottom:10px}.substitution-grid label{display:block;color:#c9b77f;font-size:11px}.substitution-grid select{display:block;width:100%;margin-top:5px;font-size:12px;padding:8px}.substitution-tools>small{display:block;color:#a99a78;font-size:10px;margin-top:8px}@media(max-width:650px){.substitution-grid{grid-template-columns:1fr}}
