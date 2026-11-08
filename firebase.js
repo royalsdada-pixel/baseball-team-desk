@@ -38,7 +38,6 @@ window.firebaseBridge = {
       tx.set(metaRef,{revision:next,updatedAt:serverTimestamp(),updatedBy:user.uid});
       return next;
     });
-    const user=auth.currentUser;if(!user)throw new Error("尚未登入");
     const groups={teams:data.teams||[],players:data.players||[],games:data.games||[]};
     for(const [name,items] of Object.entries(groups)){
       const ref=collection(db,"users",user.uid,name);
@@ -55,7 +54,7 @@ window.firebaseBridge = {
         await batch.commit();
       }
     }
-    return true;
+    return nextRevision;
   },
   async downloadWorkspace(){
     const user=auth.currentUser;if(!user)throw new Error("尚未登入");
@@ -63,7 +62,7 @@ window.firebaseBridge = {
     const metaSnap=await getDocs(collection(db,"users",user.uid,"sync"));
     const meta=metaSnap.docs.find(d=>d.id==="meta");
     result._revision=meta?.data()?.revision||0;
-    for(const name of Object.keys(result)){
+    for(const name of ["teams","players","games"]){
       const snap=await getDocs(collection(db,"users",user.uid,name));
       result[name]=snap.docs.map(d=>({...d.data(),id:d.id}));
     }
