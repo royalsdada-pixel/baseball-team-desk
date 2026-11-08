@@ -159,7 +159,7 @@ async function defensePitch(type){
   else eventRecord(s,"壞球",s.balls+" 壞球",{pitchType:type},before);
  }else if(type==="strike"){
   s.strikes++;
-  if(s.strikes>=3){eventRecord(s,"三振出局","累積 3 好球",{pitchType:type},before);s.outs=Math.min(3,s.outs+1);s.balls=0;s.strikes=0}
+  if(s.strikes>=3){eventRecord(s,"三振出局","累積 3 好球",{pitchType:type},before);s.outs=Math.min(3,s.outs+1);s.balls=0;s.strikes=0;autoChangeHalfIfThreeOuts(s)}
   else eventRecord(s,"好球",s.strikes+" 好球",{pitchType:type},before);
  }else if(type==="foul"){
   const counted=s.strikes<2;if(counted)s.strikes++;
@@ -190,10 +190,10 @@ async function recordPitcherResult(type){
  }
  if(type!=="pitchGroundout")s.bases=next;
  if(runs)addRuns(g,s,runs);
- if(type==="pitchGroundout")autoChangeHalfIfThreeOuts(s);
  eventRecord(s,labels[type],(runs?"跑者得分 "+runs+" 分；":"")+(type==="pitchGroundout"?"壘包維持原狀":"壘包已依打擊結果更新"),{pitchType:"inPlay",pitcherOutcome:type,opponentHit:type!=="pitchGroundout",runs},before);
  s.balls=0;s.strikes=0;
- await saveScoring();toast(labels[type]+"，壘包與比分已更新");
+ if(type==="pitchGroundout")autoChangeHalfIfThreeOuts(s);
+ await saveScoring();toast(type==="pitchGroundout"&&s.outs===0?"三出局！已自動換局":labels[type]+"，壘包與比分已更新");
 }
 async function pitcherOutcome(type){
  const g=currentGame();if(!g)return;const s=ensureLive(g);
