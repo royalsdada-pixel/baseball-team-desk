@@ -54,7 +54,7 @@ function renderScoring(){
  $("scoreHalf").textContent=(s.half==="top"?"上半局":"下半局")+"・"+(batting?"我方進攻":"我方守備");
  $("scoreBalls").textContent=s.balls;$("scoreStrikes").textContent=s.strikes;$("scoreOuts").textContent=s.outs;$("scorePitches").textContent=s.pitches;
  $("inningPitches").textContent=s.inningPitches[s.inning]||0;$("scorePitchesMirror").textContent=s.pitches;
- $("strikeRate").textContent=s.pitches?Math.round((s.events.filter(e=>e.pitchType==="strike"||e.pitchType==="foul"&&e.countedStrike).length/s.pitches)*100)+"%":"--";
+ $("strikeRate").textContent=s.pitches?Math.round((s.events.filter(e=>e.meta?.pitchType==="strike"||e.meta?.pitchType==="foul"&&e.meta?.countedStrike).length/s.pitches)*100)+"%":"--";
  $("scoreMode").textContent=batting?"進攻模式":"守備模式";
  $("scoreModeHint").textContent=batting?"記錄我方打者結果":"記錄投手投球結果";
  $("defenseActions").hidden=batting;$("offenseActions").hidden=!batting;
@@ -62,8 +62,8 @@ function renderScoring(){
  $("scoreStatus").textContent=s.status;$("scoreSaved").textContent="資料自動儲存";
 }
 async function saveScoring(){await persist();renderScoring()}
-function eventRecord(s,label,detail="",meta={}){
- const before={balls:s.balls,strikes:s.strikes,outs:s.outs,pitches:s.pitches,inningPitches:{...s.inningPitches}};
+function eventRecord(s,label,detail="",meta={},beforeOverride=null){
+ const before=beforeOverride||{balls:s.balls,strikes:s.strikes,outs:s.outs,pitches:s.pitches,inningPitches:{...s.inningPitches}};
  s.events.push({label,detail,meta, before,inning:s.inning,half:s.half,inningLabel:"第"+s.inning+"局"+(s.half==="top"?"上":"下"),time:new Date().toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit"})});
 }
 function countPitch(s,kind){
@@ -74,18 +74,19 @@ async function defensePitch(type){
  const g=currentGame();if(!g)return;const s=ensureLive(g);
  if(s.status==="已結束"){toast("比賽已結束");return}
  if(ourTeamBatting(g,s)){toast("目前是我方進攻");return}
+ const before={balls:s.balls,strikes:s.strikes,outs:s.outs,pitches:s.pitches,inningPitches:{...s.inningPitches}};
  countPitch(s,type);
  if(type==="ball"){
   s.balls++;
-  if(s.balls>=4){eventRecord(s,"四壞球保送","累積 4 壞球，打者保送",{pitchType:type});s.balls=0;s.strikes=0}
-  else eventRecord(s,"壞球",s.balls+" 壞球",{pitchType:type});
+  if(s.balls>=4){eventRecord(s,"四壞球保送","累積 4 壞球，打者保送",{pitchType:type},before);s.balls=0;s.strikes=0}
+  else eventRecord(s,"壞球",s.balls+" 壞球",{pitchType:type},before);
  }else if(type==="strike"){
   s.strikes++;
-  if(s.strikes>=3){eventRecord(s,"三振出局","累積 3 好球",{pitchType:type});s.outs=Math.min(3,s.outs+1);s.balls=0;s.strikes=0}
-  else eventRecord(s,"好球",s.strikes+" 好球",{pitchType:type});
+  if(s.strikes>=3){eventRecord(s,"三振出局","累積 3 好球",{pitchType:type},before);s.outs=Math.min(3,s.outs+1);s.balls=0;s.strikes=0}
+  else eventRecord(s,"好球",s.strikes+" 好球",{pitchType:type},before);
  }else if(type==="foul"){
   const counted=s.strikes<2;if(counted)s.strikes++;
-  eventRecord(s,"界外球",counted?"計為好球":"兩好球後不增加好球數",{pitchType:type,countedStrike:counted});
+  eventRecord(s,"界外球",counted?"計為好球":"兩好球後不增加好球數",{pitchType:type,countedStrike:counted},before);
  }
  await saveScoring();
 }
@@ -93,11 +94,12 @@ async function pitcherOutcome(type){
  const g=currentGame();if(!g)return;const s=ensureLive(g);
  if(s.status==="已結束"){toast("比賽已結束");return}
  if(ourTeamBatting(g,s)){toast("目前是我方進攻");return}
+ const before={balls:s.balls,strikes:s.strikes,outs:s.outs,pitches:s.pitches,inningPitches:{...s.inningPitches}};
  const labels={strikeout:"三振出局",walk:"四壞球保送",balk:"投手犯規",error:"失誤上壘"};
  const details={strikeout:"手動登記三振結果",walk:"手動登記四壞保送",balk:"投手犯規，不計入投球數",error:"守備失誤，打者上壘"};
  // A balk is not a pitch. Strikeout/walk buttons record a completed result, not an extra pitch.
  if(type==="error")countPitch(s,"inPlay");
- eventRecord(s,labels[type],details[type],{outcome:type,pitchType:type==="error"?"inPlay":null});
+ eventRecord(s,labels[type],details[type],{outcome:type,pitchType:type==="error"?"inPlay":null},before);
  if(type==="strikeout"){s.outs=Math.min(3,s.outs+1);s.balls=0;s.strikes=0}
  if(type==="walk"){s.balls=0;s.strikes=0}
  await saveScoring();
@@ -136,6 +138,7 @@ $("scorePage").addEventListener("click",async e=>{
  if(a==="awayPlus"){await adjustScore("away",1);return}if(a==="awayMinus"){await adjustScore("away",-1);return}
  if(a==="homePlus"){await adjustScore("home",1);return}if(a==="homeMinus"){await adjustScore("home",-1);return}
  if(["ball","strike","foul"].includes(a)){await defensePitch(a);return}
- if(["strikeout","walk","balk","error"].includes(a)){await pitcherOutcome(a);return}
- if(["single","double","triple","homerun","walk","hbp","out","error"].includes(a))await offenseResult(a);
+ const g=currentGame();if(["walk","error"].includes(a)){if(g&&ourTeamBatting(g,ensureLive(g)))await offenseResult(a);else await pitcherOutcome(a);return}
+ if(["strikeout","balk"].includes(a)){await pitcherOutcome(a);return}
+ if(["single","double","triple","homerun","hbp","out"].includes(a))await offenseResult(a);
 });
