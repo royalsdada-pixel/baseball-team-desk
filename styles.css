@@ -79,3 +79,7 @@ dialog label{color:#c9b77f}
 .analysis-table th{color:#c9a44d;font-size:11px}
 .analysis-note{color:#a99a78;font-size:12px}
 @media(max-width:650px){.analysis-metrics{grid-template-columns:repeat(2,1fr)}.analysis-filter{display:block}.analysis-filter label{margin:8px 0}}
+
+.batter-picker{margin:0 0 12px}
+.analysis-card .analysis-metrics{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media(max-width:650px){.analysis-card .analysis-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
