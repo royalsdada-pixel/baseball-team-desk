@@ -36,10 +36,10 @@ $("import").onchange=async e=>{let f=e.target.files[0];if(!f)return;try{let x=JS
 let activeGameId=null;
 function currentGame(){return state.games.find(g=>g.id===activeGameId)}
 function ensureLive(g){
- if(!g.live)g.live={inning:1,half:"top",balls:0,strikes:0,outs:0,home:0,away:0,pitches:0,events:[],status:"進行中"};
+ if(!g.live)g.live={inning:1,half:"top",balls:0,strikes:0,outs:0,home:0,away:0,pitches:0,inningPitches:{},events:[],status:"進行中"};
  const s=g.live;
  s.inning=s.inning||1;s.half=s.half||"top";s.balls=s.balls||0;s.strikes=s.strikes||0;s.outs=s.outs||0;
- s.away=s.away||0;s.home=s.home||0;s.pitches=s.pitches||0;s.events=s.events||[];
+ s.away=s.away||0;s.home=s.home||0;s.pitches=s.pitches||0;s.inningPitches=s.inningPitches||{};s.events=s.events||[];
  return s;
 }
 function ourTeamBatting(g,s){return (s.half==="top" && (g.battingOrder||"first")==="first") || (s.half==="bottom" && (g.battingOrder||"first")==="second")}
@@ -53,6 +53,8 @@ function renderScoring(){
  $("scoreInning").textContent="第 "+s.inning+" 局";
  $("scoreHalf").textContent=(s.half==="top"?"上半局":"下半局")+"・"+(batting?"我方進攻":"我方守備");
  $("scoreBalls").textContent=s.balls;$("scoreStrikes").textContent=s.strikes;$("scoreOuts").textContent=s.outs;$("scorePitches").textContent=s.pitches;
+ $("inningPitches").textContent=s.inningPitches[s.inning]||0;$("scorePitchesMirror").textContent=s.pitches;
+ $("strikeRate").textContent=s.pitches?Math.round((s.events.filter(e=>e.pitchType==="strike"||e.pitchType==="foul"&&e.countedStrike).length/s.pitches)*100)+"%":"--";
  $("scoreMode").textContent=batting?"進攻模式":"守備模式";
  $("scoreModeHint").textContent=batting?"記錄我方打者結果":"記錄投手投球結果";
  $("defenseActions").hidden=batting;$("offenseActions").hidden=!batting;
@@ -60,26 +62,44 @@ function renderScoring(){
  $("scoreStatus").textContent=s.status;$("scoreSaved").textContent="資料自動儲存";
 }
 async function saveScoring(){await persist();renderScoring()}
-function eventRecord(s,label,detail=""){
- s.events.push({label,detail,inningLabel:"第"+s.inning+"局"+(s.half==="top"?"上":"下"),time:new Date().toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit"})});
+function eventRecord(s,label,detail="",meta={}){
+ const before={balls:s.balls,strikes:s.strikes,outs:s.outs,pitches:s.pitches,inningPitches:{...s.inningPitches}};
+ s.events.push({label,detail,meta, before,inning:s.inning,half:s.half,inningLabel:"第"+s.inning+"局"+(s.half==="top"?"上":"下"),time:new Date().toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit"})});
+}
+function countPitch(s,kind){
+ s.pitches++;
+ s.inningPitches[s.inning]=(s.inningPitches[s.inning]||0)+1;
 }
 async function defensePitch(type){
  const g=currentGame();if(!g)return;const s=ensureLive(g);
  if(s.status==="已結束"){toast("比賽已結束");return}
  if(ourTeamBatting(g,s)){toast("目前是我方進攻");return}
- s.pitches++;
+ countPitch(s,type);
  if(type==="ball"){
   s.balls++;
-  if(s.balls>=4){eventRecord(s,"四壞球","投出第 4 顆壞球，打者保送");s.balls=0;s.strikes=0}
-  else eventRecord(s,"壞球",s.balls+" 壞球");
+  if(s.balls>=4){eventRecord(s,"四壞球保送","累積 4 壞球，打者保送",{pitchType:type});s.balls=0;s.strikes=0}
+  else eventRecord(s,"壞球",s.balls+" 壞球",{pitchType:type});
  }else if(type==="strike"){
   s.strikes++;
-  if(s.strikes>=3){eventRecord(s,"三振出局","三振");s.outs=Math.min(3,s.outs+1);s.balls=0;s.strikes=0}
-  else eventRecord(s,"好球",s.strikes+" 好球");
+  if(s.strikes>=3){eventRecord(s,"三振出局","累積 3 好球",{pitchType:type});s.outs=Math.min(3,s.outs+1);s.balls=0;s.strikes=0}
+  else eventRecord(s,"好球",s.strikes+" 好球",{pitchType:type});
  }else if(type==="foul"){
-  if(s.strikes<2)s.strikes++;
-  eventRecord(s,"界外球",s.strikes<2?"計為好球":"兩好球後界外球，不增加好球數");
+  const counted=s.strikes<2;if(counted)s.strikes++;
+  eventRecord(s,"界外球",counted?"計為好球":"兩好球後不增加好球數",{pitchType:type,countedStrike:counted});
  }
+ await saveScoring();
+}
+async function pitcherOutcome(type){
+ const g=currentGame();if(!g)return;const s=ensureLive(g);
+ if(s.status==="已結束"){toast("比賽已結束");return}
+ if(ourTeamBatting(g,s)){toast("目前是我方進攻");return}
+ const labels={strikeout:"三振出局",walk:"四壞球保送",balk:"投手犯規",error:"失誤上壘"};
+ const details={strikeout:"手動登記三振結果",walk:"手動登記四壞保送",balk:"投手犯規，不計入投球數",error:"守備失誤，打者上壘"};
+ // A balk is not a pitch. Strikeout/walk buttons record a completed result, not an extra pitch.
+ if(type==="error")countPitch(s,"inPlay");
+ eventRecord(s,labels[type],details[type],{outcome:type,pitchType:type==="error"?"inPlay":null});
+ if(type==="strikeout"){s.outs=Math.min(3,s.outs+1);s.balls=0;s.strikes=0}
+ if(type==="walk"){s.balls=0;s.strikes=0}
  await saveScoring();
 }
 async function offenseResult(type){
@@ -101,9 +121,9 @@ async function nextHalf(){
 async function undoScoring(){
  const g=currentGame();if(!g)return;const s=ensureLive(g);
  if(!s.events.length){toast("目前沒有紀錄");return}
- const last=s.events.pop();s.pitches=Math.max(0,s.pitches-((["壞球","好球","界外球"].includes(last.label))?1:0));
- // Keep undo safe and predictable: remove last event, reset current batter count.
- s.balls=0;s.strikes=0;
+ const last=s.events.pop();
+ if(last.before){s.balls=last.before.balls;s.strikes=last.before.strikes;s.outs=last.before.outs;s.pitches=last.before.pitches;s.inningPitches={...last.before.inningPitches}}
+ else {if(["壞球","好球","界外球"].includes(last.label))s.pitches=Math.max(0,s.pitches-1);s.balls=0;s.strikes=0}
  await saveScoring();
 }
 $("gameList").addEventListener("click",e=>{const b=e.target.closest("[data-score]");if(b)showScoring(b.dataset.score)});
@@ -116,5 +136,6 @@ $("scorePage").addEventListener("click",async e=>{
  if(a==="awayPlus"){await adjustScore("away",1);return}if(a==="awayMinus"){await adjustScore("away",-1);return}
  if(a==="homePlus"){await adjustScore("home",1);return}if(a==="homeMinus"){await adjustScore("home",-1);return}
  if(["ball","strike","foul"].includes(a)){await defensePitch(a);return}
+ if(["strikeout","walk","balk","error"].includes(a)){await pitcherOutcome(a);return}
  if(["single","double","triple","homerun","walk","hbp","out","error"].includes(a))await offenseResult(a);
 });
