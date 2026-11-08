@@ -41,7 +41,7 @@ function ensureLive(g){
  if(!g.live)g.live={inning:1,half:"top",balls:0,strikes:0,outs:0,home:0,away:0,pitches:0,inningPitches:{},events:[],status:"進行中"};
  const s=g.live;
  s.inning=s.inning||1;s.half=s.half||"top";s.balls=s.balls||0;s.strikes=s.strikes||0;s.outs=s.outs||0;
- s.away=s.away||0;s.home=s.home||0;s.pitches=s.pitches||0;s.inningPitches=s.inningPitches||{};s.events=s.events||[];s.bases=s.bases||[null,null,null];s.lineup=s.lineup||Array(9).fill("");s.lineupIndex=Number.isInteger(s.lineupIndex)?s.lineupIndex:0;s.lineupPositions=s.lineupPositions||Array(9).fill("");s.substitutions=s.substitutions||[];s.defense=s.defense||{};s.defenseHistory=s.defenseHistory||[];
+ s.away=s.away||0;s.home=s.home||0;s.pitches=s.pitches||0;s.inningPitches=s.inningPitches||{};s.events=s.events||[];s.bases=s.bases||[null,null,null];s.lineup=s.lineup||Array(9).fill("");s.lineupIndex=Number.isInteger(s.lineupIndex)?s.lineupIndex:0;s.lineupPositions=s.lineupPositions||Array(9).fill("");s.substitutions=s.substitutions||[];s.defense=s.defense||{};s.defenseHistory=s.defenseHistory||[];if(!s.defenseInitialized){const positionCodes={"投手":"P","捕手":"C","一壘手":"1B","二壘手":"2B","三壘手":"3B","游擊手":"SS","左外野手":"LF","中外野手":"CF","右外野手":"RF"};for(let i=0;i<s.lineup.length;i++){const id=s.lineup[i],position=s.lineupPositions[i]||state.players.find(p=>p.id===id)?.position,code=positionCodes[position];if(id&&code&&!s.defense[code]&&!Object.values(s.defense).includes(id))s.defense[code]=id;}s.defenseInitialized=true;}
  return s;
 }
 function ourTeamBatting(g,s){return (s.half==="top" && (g.battingOrder||"first")==="first") || (s.half==="bottom" && (g.battingOrder||"first")==="second")}
