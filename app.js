@@ -338,9 +338,52 @@ $("cloudDownload").addEventListener("click",async()=>{
 
 
 // ===== Guarded automatic sync =====
-let cloudSyncRevision=null,cloudSyncTimer=null,cloudSyncBusy=false,cloudSyncEnabled=false;
+let cloudSyncRevision=null,cloudSyncTimer=null,cloudSyncBusy=false,cloudSyncEnabled=false,cloudWatchStop=null,cloudApplyingRemote=false;
 function setCloudSyncLabel(message){const el=$("cloudStatus");if(el&&window.firebaseBridge?.currentUser)el.textContent="雲端："+message}
 function syncPreferenceKey(){return "baseball-team-desk-sync-"+(window.firebaseBridge?.currentUser?.uid||"")}
+function syncDeviceId(){
+ const key="baseball-team-desk-device-id";
+ let id=localStorage.getItem(key);
+ if(!id){id=uid();localStorage.setItem(key,id)}
+ return id;
+}
+function stopCloudWatch(){if(cloudWatchStop){cloudWatchStop();cloudWatchStop=null}}
+function startCloudWatch(){
+ stopCloudWatch();
+ if(!cloudSyncEnabled||!window.firebaseBridge?.currentUser||!window.firebaseBridge.watchWorkspace)return;
+ cloudWatchStop=window.firebaseBridge.watchWorkspace(meta=>{
+  if(meta.error){console.error(meta.error);setCloudSyncLabel("即時連線中斷");return}
+  if(!cloudSyncEnabled||!meta.revision)return;
+  if(meta.updatedBy===syncDeviceId()){
+   cloudSyncRevision=meta.revision;
+   localStorage.setItem(syncPreferenceKey()+"-revision",String(cloudSyncRevision));
+   return;
+  }
+  if(meta.revision===cloudSyncRevision)return;
+  // Never replace local edits that are waiting to upload. Pause and ask for a deliberate refresh instead.
+  if(cloudSyncBusy||cloudSyncTimer!==null){
+   cloudSyncEnabled=false;localStorage.removeItem(syncPreferenceKey());clearTimeout(cloudSyncTimer);cloudSyncTimer=null;
+   $("cloudAuto").disabled=false;$("cloudAuto").textContent="重新啟用自動同步";
+   setCloudSyncLabel("有其他裝置更新，請先下載雲端資料");toast("偵測到其他裝置更新。為保護本機尚未同步的紀錄，已暫停自動同步，請先匯出備份再下載雲端資料。");
+   stopCloudWatch();return;
+  }
+  applyRemoteWorkspace(meta.revision).catch(err=>{console.error(err);setCloudSyncLabel("接收雲端更新失敗");toast("接收雲端更新失敗："+(err.message||"請稍後重試"))});
+ });
+}
+async function applyRemoteWorkspace(revision){
+ const remote=await window.firebaseBridge.downloadWorkspace();
+ if(remote._revision!==revision)return;
+ cloudApplyingRemote=true;
+ try{
+  state={teams:remote.teams,players:remote.players,games:remote.games};
+  await persist();render();
+  if(activeGameId&&state.games.some(g=>g.id===activeGameId))renderScoring();
+  cloudSyncRevision=remote._revision;
+  localStorage.setItem(syncPreferenceKey()+"-revision",String(cloudSyncRevision));
+  setCloudSyncLabel("已接收其他裝置更新");
+  toast("已自動接收其他裝置的最新資料");
+ }finally{cloudApplyingRemote=false}
+}
 async function activateCloudSync(){
  const user=window.firebaseBridge?.currentUser;if(!user)return;
  const remote=await window.firebaseBridge.downloadWorkspace();
@@ -354,14 +397,14 @@ async function activateCloudSync(){
    cloudSyncRevision=remote._revision;
  }
  cloudSyncEnabled=true;localStorage.setItem(syncPreferenceKey(),"1");localStorage.setItem(syncPreferenceKey()+"-revision",String(cloudSyncRevision));
- $("cloudAuto").textContent="自動同步已啟用";$("cloudAuto").disabled=true;
+ $("cloudAuto").textContent="自動同步已啟用";$("cloudAuto").disabled=true;startCloudWatch();
  setCloudSyncLabel("自動同步已啟用");toast("自動同步已啟用");
 }
 async function pushCloudChanges(){
  if(!cloudSyncEnabled||cloudSyncBusy||!navigator.onLine||!window.firebaseBridge?.currentUser)return;
  cloudSyncBusy=true;setCloudSyncLabel("同步中…");
  try{
-  const rev=await window.firebaseBridge.uploadWorkspace(state,cloudSyncRevision);
+  const rev=await window.firebaseBridge.uploadWorkspace(state,cloudSyncRevision,syncDeviceId());
   cloudSyncRevision=rev;localStorage.setItem(syncPreferenceKey()+"-revision",String(rev));
   setCloudSyncLabel("已同步");
  }catch(err){
@@ -371,22 +414,22 @@ async function pushCloudChanges(){
  }finally{cloudSyncBusy=false}
 }
 function scheduleCloudSync(){
- if(!cloudSyncEnabled||!window.firebaseBridge?.currentUser)return;
- clearTimeout(cloudSyncTimer);cloudSyncTimer=setTimeout(pushCloudChanges,1200);
+ if(cloudApplyingRemote||!cloudSyncEnabled||!window.firebaseBridge?.currentUser)return;
+ clearTimeout(cloudSyncTimer);cloudSyncTimer=setTimeout(()=>{cloudSyncTimer=null;pushCloudChanges()},1200);
 }
 $("cloudAuto").addEventListener("click",async()=>{
  const b=$("cloudAuto");b.disabled=true;b.textContent="檢查雲端資料…";
  try{await activateCloudSync()}catch(e){toast(e.message||"啟用自動同步失敗");b.disabled=false;b.textContent="啟用自動同步"}
 });
 window.addEventListener("firebase-auth-state",e=>{
- cloudSyncEnabled=false;cloudSyncRevision=null;
+ cloudSyncEnabled=false;cloudSyncRevision=null;stopCloudWatch();
  const user=e.detail.user;
  $("cloudAuto").hidden=!user;
  if(user){
   cloudSyncEnabled=localStorage.getItem("baseball-team-desk-sync-"+user.uid)==="1";
   const saved=localStorage.getItem("baseball-team-desk-sync-"+user.uid+"-revision");
   cloudSyncRevision=saved===null?null:Number(saved);
-  if(cloudSyncEnabled&&cloudSyncRevision!==null){setCloudSyncLabel("自動同步待連線");if(navigator.onLine)scheduleCloudSync()}
+  if(cloudSyncEnabled&&cloudSyncRevision!==null){setCloudSyncLabel("自動同步待連線");startCloudWatch();if(navigator.onLine)scheduleCloudSync()}
  }else setCloudSyncLabel("未登入");
 });
-window.addEventListener("online",()=>{if(cloudSyncEnabled)scheduleCloudSync()});
+window.addEventListener("online",()=>{if(cloudSyncEnabled){startCloudWatch();scheduleCloudSync()}});
