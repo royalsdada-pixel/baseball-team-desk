@@ -92,6 +92,8 @@ async function defensePitch(type){
  }else if(type==="foul"){
   const counted=s.strikes<2;if(counted)s.strikes++;
   eventRecord(s,"界外球",counted?"計為好球":"兩好球後不增加好球數",{pitchType:type,countedStrike:counted},before);
+ }else if(type==="inPlay"){
+  eventRecord(s,"打進場內","擊球進入場內，計入投球與好球率",{pitchType:type},before);
  }
  await saveScoring();
 }
@@ -143,7 +145,7 @@ $("scorePage").addEventListener("click",async e=>{
  if(a==="finish"||a==="resume"){const g=currentGame();if(g){ensureLive(g).status=a==="finish"?"已結束":"進行中";await saveScoring()}return}
  if(a==="awayPlus"){await adjustScore("away",1);return}if(a==="awayMinus"){await adjustScore("away",-1);return}
  if(a==="homePlus"){await adjustScore("home",1);return}if(a==="homeMinus"){await adjustScore("home",-1);return}
- if(["ball","strike","foul"].includes(a)){await defensePitch(a);return}
+ if(["ball","strike","foul","inPlay"].includes(a)){await defensePitch(a);return}
  const g=currentGame();if(["walk","error"].includes(a)){if(g&&ourTeamBatting(g,ensureLive(g)))await offenseResult(a);else await pitcherOutcome(a);return}
  if(["strikeout","balk"].includes(a)){await pitcherOutcome(a);return}
  if(["single","double","triple","homerun","hbp","out"].includes(a))await offenseResult(a);
