@@ -55,7 +55,7 @@ function renderScoring(){
  $("scoreBalls").textContent=s.balls;$("scoreStrikes").textContent=s.strikes;$("scoreOuts").textContent=s.outs;$("scorePitches").textContent=s.pitches;
  $("inningPitches").textContent=s.inningPitches[s.inning]||0;$("scorePitchesMirror").textContent=s.pitches;
  $("strikeRate").textContent=s.pitches?Math.round((s.events.filter(e=>e.meta?.pitchType==="strike"||e.meta?.pitchType==="foul"&&e.meta?.countedStrike).length/s.pitches)*100)+"%":"--";
- const pitcherSelect=$("pitcherSelect");
+ const pitcherSelect=$("pitcherSelect");$("pitcherPicker").hidden=batting;
  const roster=state.players.filter(p=>p.teamId===g.teamId).sort((a,b)=>Number(a.number)-Number(b.number));
  pitcherSelect.innerHTML='<option value="">未指定投手</option>'+roster.map(p=>'<option value="'+p.id+'">#'+esc(p.number)+' '+esc(p.name)+'</option>').join("");
  pitcherSelect.value=s.activePitcherId||"";
@@ -68,8 +68,8 @@ function renderScoring(){
 async function saveScoring(){await persist();renderScoring()}
 function eventRecord(s,label,detail="",meta={},beforeOverride=null){
  const before=beforeOverride||{balls:s.balls,strikes:s.strikes,outs:s.outs,pitches:s.pitches,inningPitches:{...s.inningPitches}};
- meta={...meta,pitcherId:s.activePitcherId||""};
- s.events.push({label,detail,meta, before,inning:s.inning,half:s.half,inningLabel:"第"+s.inning+"局"+(s.half==="top"?"上":"下"),time:new Date().toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit"})});
+ const eventMeta={...meta};if(meta.pitchType||meta.outcome)eventMeta.pitcherId=s.activePitcherId||"";
+ s.events.push({label,detail,meta:eventMeta, before,inning:s.inning,half:s.half,inningLabel:"第"+s.inning+"局"+(s.half==="top"?"上":"下"),time:new Date().toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit"})});
 }
 function countPitch(s,kind){
  s.pitches++;
