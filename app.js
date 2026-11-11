@@ -63,7 +63,22 @@ function renderScoring(){
  pitcherSelect.value=s.activePitcherId||"";
  const defensePositions={"P":"投手","C":"捕手","1B":"一壘手","2B":"二壘手","3B":"三壘手","SS":"游擊手","LF":"左外野手","CF":"中外野手","RF":"右外野手"};
  const activeDefenseIds=Object.values(s.defense).filter(Boolean);
- for(const [code,label] of Object.entries(defensePositions)){const sel=$("defense_"+code);if(!sel)continue;const old=s.defense[code]||"";sel.innerHTML='<option value="">未指定</option>'+roster.filter(p=>!activeDefenseIds.includes(p.id)||p.id===old).map(p=>'<option value="'+p.id+'">#'+esc(p.number)+' '+esc(p.name)+'</option>').join("");sel.value=old;}
+ for(const [code,label] of Object.entries(defensePositions)){const sel=$("defense_"+code);if(!sel)continue;const old=s.defense[code]||"";sel.innerHTML='<option value="">未指定</option>'+roster.filter(p=>!activeDefenseIds.includes(p.id)||p.id===old).map(p=>'<option value="'+p.id+'">#'+esc(p.number)+' '+esc(p.name)+'</option>').join("");sel.value=old;
+ sel.onchange=async e=>{
+  const currentGameData=currentGame();if(!currentGameData)return;
+  const live=ensureLive(currentGameData),newId=e.target.value||"",oldId=live.defense[code]||"";
+  if(newId===oldId)return;
+  if(newId&&Object.entries(live.defense).some(([other,id])=>other!==code&&id===newId)){toast("同一位球員不能重複守兩個位置");renderScoring();return}
+  const playerLabel=id=>{const p=state.players.find(x=>x.id===id);return p?"#"+p.number+" "+p.name:"未指定"};
+  const positionLabel=label;
+  const snapshot={defense:{...live.defense},defenseHistory:[...live.defenseHistory],activePitcherId:live.activePitcherId||"",balls:live.balls,strikes:live.strikes,outs:live.outs,pitches:live.pitches,inningPitches:{...live.inningPitches},bases:[...live.bases],away:live.away,home:live.home};
+  if(newId)live.defense[code]=newId;else delete live.defense[code];
+  live.defenseHistory.push({code,position:positionLabel,fromPlayerId:oldId,toPlayerId:newId,inning:live.inning,half:live.half,time:new Date().toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit"})});
+  if(code==="P"){live.activePitcherId=newId;if(oldId!==newId){live.balls=0;live.strikes=0}}
+  eventRecord(live,"守備位置設定",positionLabel+"："+playerLabel(oldId)+" → "+playerLabel(newId),{defenseChange:true,positionCode:code,fromPlayerId:oldId,toPlayerId:newId},snapshot);
+  await saveScoring();toast(positionLabel+"已儲存");
+ };
+ }
  const defenseSummary=$("defenseSummary");if(defenseSummary){const filled=Object.entries(defensePositions).filter(([code])=>s.defense[code]).length;defenseSummary.textContent="已設定 "+filled+" / 9 個守備位置";}
  const fieldingSelect=$("fielderSelect");if(fieldingSelect){const oldFielder=fieldingSelect.value;fieldingSelect.innerHTML='<option value="">選擇守備球員</option>'+roster.filter(p=>activeDefenseIds.includes(p.id)||p.id===oldFielder).map(p=>'<option value="'+p.id+'">#'+esc(p.number)+' '+esc(p.name)+'</option>').join("");fieldingSelect.value=activeDefenseIds.includes(oldFielder)?oldFielder:(s.activePitcherId||"")}
  for(let i=1;i<=3;i++){const sel=$("autoFielder"+i);if(sel){const old=sel.value;const fielders=roster.filter(p=>activeDefenseIds.includes(p.id)||p.id===old);sel.innerHTML='<option value="">選擇球員</option>'+fielders.map(p=>'<option value="'+p.id+'">#'+esc(p.number)+' '+esc(p.name)+'</option>').join("");sel.value=fielders.some(p=>p.id===old)?old:""}}
