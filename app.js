@@ -197,7 +197,7 @@ async function recordManualRunnerEvent(action){
  if(to!==4&&to<=from){toast("目標壘包必須在跑者前方");return}
  if(to!==4&&s.bases[to-1]&&to-1!==index){toast("目標壘包已有跑者，請先處理前方跑者");return}
  const runner=state.players.find(p=>p.id===runnerId),runnerName=runner?"#"+runner.number+" "+runner.name:"跑者";
- const before={balls:s.balls,strikes:s.strikes,outs:s.outs,pitches:s.pitches,inningPitches:{...s.inningPitches}};
+ const before={balls:s.balls,strikes:s.strikes,outs:s.outs,pitches:s.pitches,inningPitches:{...s.inningPitches},bases:[...s.bases],away:s.away,home:s.home};
  const reason={runnerSteal:"盜壘成功",runnerWP:"暴投（WP）進壘",runnerPB:"捕逸（PB）進壘",runnerCaught:"盜壘失敗／阻殺",runnerAdvance:"手動推進"}[action];
  const baseName=n=>n===4?"本壘":n+"壘";
  if(action==="runnerCaught"){
@@ -214,7 +214,7 @@ async function recordManualRunnerEvent(action){
  if(action==="runnerPB")meta.passedBallAdvance=true;
  if(action==="runnerAdvance"&&to===4){
   const paEvent=[...s.events].reverse().find(e=>e.meta?.batterOutcome&&e.inning===s.inning&&e.half===s.half);
-  if(paEvent){paEvent.meta.rbi=(Number(paEvent.meta.rbi)||0)+1;paEvent.meta.scoringRbi=paEvent.meta.rbi;meta.rbiCreditedTo=paEvent.meta.batterId||"";}
+  if(paEvent){meta.rbiCreditedTo=paEvent.meta.batterId||"";meta.previousRbi=Number(paEvent.meta.rbi)||0;paEvent.meta.rbi=meta.previousRbi+1;paEvent.meta.scoringRbi=paEvent.meta.rbi;}
  }
  if(to===4)meta.runRecords=attachRunRecords(s,[runnerId],s.activePitcherId||"",action==="runnerPB"?"PB":action==="runnerWP"?"WP":null);
  eventRecord(s,reason,runnerName+" 從"+baseName(from)+"前進至"+baseName(to)+(to===4?"，跑者得分":""),meta,before);
@@ -335,6 +335,7 @@ async function undoScoring(){
  const g=currentGame();if(!g)return;const s=ensureLive(g);
  if(!s.events.length){toast("目前沒有紀錄");return}
  const last=s.events.pop();
+ if(last.meta?.rbiCreditedTo!==undefined){const paEvent=[...s.events].reverse().find(e=>e.meta?.batterOutcome&&e.meta?.batterId===last.meta.rbiCreditedTo&&e.inning===last.inning&&e.half===last.half);if(paEvent){paEvent.meta.rbi=Number(last.meta.previousRbi)||0;paEvent.meta.scoringRbi=paEvent.meta.rbi}}
  if(last.before){if(last.before.inning!==undefined)s.inning=last.before.inning;if(last.before.half)s.half=last.before.half;s.balls=last.before.balls;s.strikes=last.before.strikes;s.outs=last.before.outs;s.pitches=last.before.pitches;s.inningPitches={...last.before.inningPitches};s.bases=[...(last.before.bases||[null,null,null])];s.away=last.before.away??s.away;s.home=last.before.home??s.home;s.lineupIndex=last.before.lineupIndex??s.lineupIndex;if(last.before.lineup)s.lineup=[...last.before.lineup];if(last.before.lineupPositions)s.lineupPositions=[...last.before.lineupPositions];if(last.before.substitutions)s.substitutions=[...last.before.substitutions];if(last.before.defense)s.defense={...last.before.defense};if(last.before.defenseHistory)s.defenseHistory=[...last.before.defenseHistory];if(last.before.runnerPitcherMap)s.runnerPitcherMap={...last.before.runnerPitcherMap};s.activeBatterId=last.before.activeBatterId??s.activeBatterId;s.activePitcherId=last.before.activePitcherId??s.activePitcherId}
  else {if(["壞球","好球","界外球"].includes(last.label))s.pitches=Math.max(0,s.pitches-1);s.balls=0;s.strikes=0}
  await saveScoring();
@@ -673,8 +674,8 @@ function renderTeamAnalytics(){
  $("teamPitchingStats").innerHTML=metricHtml([["失分 R",allowed],["自責分 ER",earned],["三振 SO",pitchK],["四壞 BB",pitchBB],["ERA","資料不足"],["WHIP","資料不足"]])+'<p class="analysis-note">投手登板事件及責失分紀錄尚未涵蓋所有情境，ERA、WHIP 暫不計算。</p>';
  $("teamFieldingStats").innerHTML=metricHtml([["刺殺 PO",po],["助殺 A",assists],["失誤 E",fieldErrors],["守備率 FPCT",fpDen?statFmtRate(po+assists,fpDen):"資料不足"]]);
  const playerMap=new Map();
- for(const {e} of batting){const id=e.meta?.batterId||"";if(!playerMap.has(id))playerMap.set(id,[]);playerMap.get(id).push(e)}
- const leaders=[...playerMap].map(([id,rows])=>{const p=state.players.find(x=>x.id===id);const n=t=>rows.filter(e=>e.meta?.batterOutcome===t).length;const h=n("single")+n("double")+n("triple")+n("homerun"),a=h+n("strikeout")+n("out")+n("error"),w=n("walk"),hb=n("hbp"),sf=n("sacFly"),sh=n("sacBunt"),b=n("single")+2*n("double")+3*n("triple")+4*n("homerun");return {name:p?"#"+p.number+" "+p.name:"未指定打者",pa:a+w+hb+sf+sh,g:new Set(rows.map(e=>e.gameId||"")).size,avg:statFmtRate(h,a),ops:a&&a+w+hb+sf?((h+w+hb)/(a+w+hb+sf)+b/a).toFixed(3).replace(/^0/,""):"資料不足",h}});
+ for(const {e,g} of batting){const id=e.meta?.batterId||"";if(!playerMap.has(id))playerMap.set(id,[]);playerMap.get(id).push({...e,_gameId:g.id})}
+ const leaders=[...playerMap].map(([id,rows])=>{const p=state.players.find(x=>x.id===id);const n=t=>rows.filter(e=>e.meta?.batterOutcome===t).length;const h=n("single")+n("double")+n("triple")+n("homerun"),a=h+n("strikeout")+n("out")+n("error"),w=n("walk"),hb=n("hbp"),sf=n("sacFly"),sh=n("sacBunt"),b=n("single")+2*n("double")+3*n("triple")+4*n("homerun");return {name:p?"#"+p.number+" "+p.name:"未指定打者",pa:a+w+hb+sf+sh,g:new Set(rows.map(e=>e._gameId)).size,avg:statFmtRate(h,a),ops:a&&a+w+hb+sf?((h+w+hb)/(a+w+hb+sf)+b/a).toFixed(3).replace(/^0/,""):"資料不足",h}});
  leaders.sort((a,b)=>(b.h-a.h)||(b.pa-a.pa));
  $("teamBattingLeaders").innerHTML=leaders.length?'<div class="analysis-table-wrap"><table class="analysis-table"><thead><tr><th>球員</th><th>出賽 G</th><th>打席 PA</th><th>安打 H</th><th>打擊率 BA</th><th>OPS</th></tr></thead><tbody>'+leaders.map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+x.g+'</td><td>'+x.pa+'</td><td>'+x.h+'</td><td>'+x.avg+'</td><td>'+x.ops+'</td></tr>').join("")+'</tbody></table></div>':'<div class="empty">目前尚無可用的打席紀錄。</div>';
 }
