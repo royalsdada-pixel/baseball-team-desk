@@ -353,7 +353,7 @@ $("pitcherSelect").addEventListener("change",async e=>{
 });
 $("batterSelect").addEventListener("change",async e=>{const g=currentGame();if(!g)return;ensureLive(g).activeBatterId=e.target.value;await persist();scheduleCloudSync();toast(e.target.value?"已切換目前打者":"目前打者設為未指定")});
 
-$("fieldingPanel").addEventListener("change",async e=>{
+$("defenseGrid").addEventListener("change",async e=>{
  const select=e.target.closest('select[id^="defense_"]');if(!select)return;
  const g=currentGame();if(!g)return;
  const s=ensureLive(g),code=select.id.slice("defense_".length),valid=["P","C","1B","2B","3B","SS","LF","CF","RF"];
