@@ -130,3 +130,6 @@ dialog label{color:#c9b77f}
 .team-stat small{display:block;color:#b9ad94;font-size:11px}
 .team-stat strong{display:block;color:#e3bd5c;font-size:20px;margin-top:5px;overflow-wrap:anywhere}
 @media(max-width:850px){.analytics-columns{grid-template-columns:1fr}}
+
+/* Sacrifice batting actions */
+#offenseActions button[data-action="sacFly"],#offenseActions button[data-action="sacBunt"]{border-color:#8a6c32;background:#302719}
