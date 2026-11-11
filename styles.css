@@ -135,3 +135,17 @@ dialog label{color:#c9b77f}
 #offenseActions button[data-action="sacFly"],#offenseActions button[data-action="sacBunt"]{border-color:#8a6c32;background:#302719}
 
 .runner-tool-buttons button[data-action="runnerAdvance"]{border-color:#c9a44d;background:#302719;color:#f0d58c;font-weight:800}
+
+/* Runner controls integrated into the base-state strip */
+.base-state{align-items:center;gap:20px}
+.base-overview{display:flex;align-items:center;gap:14px;flex:none}
+.base-state .runner-tools{flex:1;min-width:0;border:0;border-left:1px solid #4a3a22;border-radius:0;padding:2px 0 2px 18px;margin:0;background:transparent}
+.base-state .runner-tools>b{margin-bottom:7px}
+.base-state .runner-tool-fields{grid-template-columns:minmax(130px,1fr) minmax(130px,1fr);gap:8px}
+.base-state .runner-tool-fields label{font-size:11px}
+.base-state .runner-tool-fields select{padding:8px 9px;font-size:12px}
+.base-state .runner-tool-buttons{grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin:7px 0}
+.base-state .runner-tool-buttons button{min-height:36px;padding:6px 5px;font-size:11px}
+.base-state .runner-tools>small{font-size:10px;color:#a99a78}
+@media(max-width:900px){.base-state{align-items:stretch;flex-wrap:wrap}.base-overview{min-width:180px}.base-state .runner-tools{border-left:0;border-top:1px solid #4a3a22;padding:12px 0 0;width:100%}}
+@media(max-width:600px){.base-state .runner-tool-buttons{grid-template-columns:repeat(2,minmax(0,1fr))}.base-state .runner-tool-buttons button:last-child{grid-column:1/-1}.base-state .runner-tool-fields{grid-template-columns:1fr 1fr}.base-state .runner-tools{padding-top:10px}}
