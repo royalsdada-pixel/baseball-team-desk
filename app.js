@@ -352,6 +352,25 @@ $("pitcherSelect").addEventListener("change",async e=>{
  await persist();scheduleCloudSync();renderScoring();toast(nextId?"投手輪替已記錄，新投手球數歸零":"已取消目前投手");
 });
 $("batterSelect").addEventListener("change",async e=>{const g=currentGame();if(!g)return;ensureLive(g).activeBatterId=e.target.value;await persist();scheduleCloudSync();toast(e.target.value?"已切換目前打者":"目前打者設為未指定")});
+
+$("fieldingPanel").addEventListener("change",async e=>{
+ const select=e.target.closest('select[id^="defense_"]');if(!select)return;
+ const g=currentGame();if(!g)return;
+ const s=ensureLive(g),code=select.id.slice("defense_".length),valid=["P","C","1B","2B","3B","SS","LF","CF","RF"];
+ if(!valid.includes(code))return;
+ const nextId=select.value||"",previousId=s.defense[code]||"";
+ if(nextId===previousId)return;
+ if(nextId&&Object.entries(s.defense).some(([other,id])=>other!==code&&id===nextId)){toast("同一位球員不能重複守兩個位置");renderScoring();return}
+ const playerName=id=>{const p=state.players.find(x=>x.id===id);return p?"#"+p.number+" "+p.name:"未指定"};
+ const positionName=fieldPositionOptions.find(x=>x[0]===code)?.[1]||code;
+ const before={defense:{...s.defense},defenseHistory:[...s.defenseHistory],activePitcherId:s.activePitcherId||"",balls:s.balls,strikes:s.strikes,outs:s.outs,pitches:s.pitches,inningPitches:{...s.inningPitches},bases:[...s.bases],away:s.away,home:s.home};
+ if(nextId)s.defense[code]=nextId;else delete s.defense[code];
+ s.defenseHistory.push({code,position:positionName,fromPlayerId:previousId,toPlayerId:nextId,inning:s.inning,half:s.half,time:new Date().toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit"})});
+ if(code==="P"){s.activePitcherId=nextId;if(previousId!==nextId){s.balls=0;s.strikes=0}}
+ eventRecord(s,"守備位置設定",positionName+"："+playerName(previousId)+" → "+playerName(nextId),{defenseChange:true,positionCode:code,fromPlayerId:previousId,toPlayerId:nextId},before);
+ await saveScoring();toast(positionName+"已儲存");
+});
+
 const fieldPositionOptions=[["P","投手"],["C","捕手"],["1B","一壘手"],["2B","二壘手"],["3B","三壘手"],["SS","游擊手"],["LF","左外野手"],["CF","中外野手"],["RF","右外野手"]];
 function renderFieldPlayControls(){const s=currentGame()?ensureLive(currentGame()):null;if(!s)return;const source=$("fieldSource"),target=$("fieldTarget"),finalTarget=$("fieldFinalTarget");const old=[source.value,target.value,finalTarget.value];for(const [sel,first] of [[source,"選擇接球位置"],[target,"選擇傳球目標"],[finalTarget,"選擇最後傳球目標"]]){sel.innerHTML='<option value="">'+first+'</option>'+fieldPositionOptions.filter(([code])=>s.defense[code]).map(([code,label])=>'<option value="'+code+'">'+label+'</option>').join("");}if(s.defense[old[0]])source.value=old[0];if(s.defense[old[1]])target.value=old[1];if(s.defense[old[2]])finalTarget.value=old[2];updateFieldPlayControls();}
 function updateFieldPlayControls(){const type=$("fieldPlayType").value,isFly=type==="flyout",isError=type==="error",isDouble=type==="doubleplay";$("fieldTargetWrap").hidden=isFly||isError;$("fieldFinalWrap").hidden=!isDouble;$("fieldPlayHint").textContent=isFly?"選擇完成接殺的守備位置，系統自動記錄該球員刺殺。":isError?"選擇發生失誤的守備位置，系統自動記錄失誤，不增加出局數。":isDouble?"選擇接球位置、第一次傳球目標及最後刺殺位置，系統自動記錄雙殺的助殺與刺殺。":"例如：游擊手接球，傳向一壘刺殺，系統自動記錄游擊手助殺及一壘手刺殺。";}
