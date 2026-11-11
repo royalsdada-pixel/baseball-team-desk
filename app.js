@@ -300,6 +300,7 @@ async function offenseResult(type){
  if(type==="sacBunt"&&!s.bases.some(Boolean)){toast("犧牲觸擊需有跑者在壘");return}
  const beforeScore=(g.battingOrder||"first")==="first"?s.away:s.home;
  const beforeBases=[...s.bases];
+ const beforeState={outs:s.outs,bases:[...s.bases],away:s.away,home:s.home,balls:s.balls,strikes:s.strikes,pitches:s.pitches,inningPitches:{...s.inningPitches}};
  let rbi=0;
  if(type==="sacFly"){
   s.bases[2]=null;addRuns(g,s,1);rbi=1;s.outs=Math.min(3,s.outs+1);
@@ -314,7 +315,7 @@ async function offenseResult(type){
   const afterScore=(g.battingOrder||"first")==="first"?s.away:s.home;
   if(["single","double","triple","homerun","walk","hbp"].includes(type))rbi=Math.max(0,afterScore-beforeScore);
  }
- eventRecord(s,labels[type]||type,"",{batterOutcome:type,batterId,rbi,sacrificeFly:type==="sacFly",sacrificeBunt:type==="sacBunt",scoringRbi:rbi}, {bases:beforeBases});
+ eventRecord(s,labels[type]||type,"",{batterOutcome:type,batterId,rbi,sacrificeFly:type==="sacFly",sacrificeBunt:type==="sacBunt",scoringRbi:rbi}, beforeState);
  if(type==="out"||type==="strikeout"||type==="sacFly"||type==="sacBunt"){if(type==="out"||type==="strikeout")s.outs=Math.min(3,s.outs+1);autoChangeHalfIfThreeOuts(s)}
  s.balls=0;s.strikes=0;
  if(["single","double","triple","homerun","walk","hbp","out","strikeout","error","sacFly","sacBunt"].includes(type)){s.lineupIndex=(s.lineupIndex+1)%9;s.activeBatterId=s.lineup[s.lineupIndex]||""}
