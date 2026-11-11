@@ -133,3 +133,5 @@ dialog label{color:#c9b77f}
 
 /* Sacrifice batting actions */
 #offenseActions button[data-action="sacFly"],#offenseActions button[data-action="sacBunt"]{border-color:#8a6c32;background:#302719}
+
+.runner-tool-buttons button[data-action="runnerAdvance"]{border-color:#c9a44d;background:#302719;color:#f0d58c;font-weight:800}
