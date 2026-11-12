@@ -48,6 +48,7 @@ function ourTeamBatting(g,s){return (s.half==="top" && (g.battingOrder||"first")
 function showScoring(id){const g=state.games.find(x=>x.id===id);if(!g)return;activeGameId=id;ensureLive(g);go("scorePage");renderScoring()}
 function renderScoring(){
  const g=currentGame();if(!g)return;const s=ensureLive(g),batting=ourTeamBatting(g,s);
+ renderPitcherEndSummary(g,s);
  $("scoreTitle").textContent=team(g.teamId)+" vs "+g.opponent;
  $("scoreMeta").textContent=g.date+"・"+g.innings+" 局制・"+(g.battingOrder==="second"?"我方後攻":"我方先攻");
  $("scoreAwayName").textContent=team(g.teamId);$("scoreHomeName").textContent=g.opponent;
@@ -61,6 +62,13 @@ function renderScoring(){
  const roster=state.players.filter(p=>p.teamId===g.teamId).sort(comparePlayerNumbers);
  pitcherSelect.innerHTML='<option value="">未指定投手</option>'+roster.map(p=>'<option value="'+p.id+'">#'+esc(p.number)+' '+esc(p.name)+'</option>').join("");
  pitcherSelect.value=s.activePitcherId||"";
+ const startingSelect=$("startingPitcherSelect");
+ startingSelect.innerHTML='<option value="">尚未指定先發投手</option>'+roster.map(p=>'<option value="'+p.id+'">#'+esc(p.number)+' '+esc(p.name)+'</option>').join("");
+ startingSelect.value=s.startingPitcherId||"";
+ const hasPitchingStarted=s.events.some(e=>e.meta?.pitchType||e.meta?.outcome==="strikeout"||e.meta?.outcome==="walk");
+ startingSelect.disabled=hasPitchingStarted;
+ $("startingPitcherHint").textContent=hasPitchingStarted?"已開始投球，先發投手設定已鎖定；換投請使用目前投手。":"開賽前指定一次即可，系統會記錄 GS；開賽後請使用下方目前投手欄位進行換投。";
+
  const defensePositions={"P":"投手","C":"捕手","1B":"一壘手","2B":"二壘手","3B":"三壘手","SS":"游擊手","LF":"左外野手","CF":"中外野手","RF":"右外野手"};
  const activeDefenseIds=Object.values(s.defense).filter(Boolean);
  for(const [code,label] of Object.entries(defensePositions)){const sel=$("defense_"+code);if(!sel)continue;const old=s.defense[code]||"";sel.innerHTML='<option value="">未指定</option>'+roster.filter(p=>!activeDefenseIds.includes(p.id)||p.id===old).map(p=>'<option value="'+p.id+'">#'+esc(p.number)+' '+esc(p.name)+'</option>').join("");sel.value=old;
@@ -260,7 +268,7 @@ async function recordPitcherResult(type){
  const runRecords=attachRunRecords(s,scoringIds,s.activePitcherId||"");
  if(type==="pitchSingle"||type==="pitchInfieldHit")s.runnerPitcherMap=s.runnerPitcherMap||{},s.runnerPitcherMap[next[0]]=s.activePitcherId||"";
  if(type==="pitchDouble"||type==="pitchTriple")s.runnerPitcherMap=s.runnerPitcherMap||{},s.runnerPitcherMap[next[type==="pitchDouble"?1:2]]=s.activePitcherId||"";
- eventRecord(s,labels[type],(runs?"跑者得分 "+runs+" 分；":"")+(type==="pitchGroundout"?"壘包維持原狀":"壘包已依打擊結果更新"),{pitchType:"inPlay",pitcherOutcome:type,opponentHit:type!=="pitchGroundout",runs,runRecords},before);
+ eventRecord(s,labels[type],(runs?"跑者得分 "+runs+" 分；":"")+(type==="pitchGroundout"?"壘包維持原狀":"壘包已依打擊結果更新"),{pitchType:"inPlay",pitcherOutcome:type,opponentHit:type!=="pitchGroundout",runs,runRecords,outsRecorded:type==="pitchGroundout"?1:0},before);
  s.balls=0;s.strikes=0;
  if(type==="pitchGroundout")autoChangeHalfIfThreeOuts(s);
  await saveScoring();toast(type==="pitchGroundout"&&s.outs===0?"三出局！已自動換局":labels[type]+"，壘包與比分已更新");
@@ -274,7 +282,7 @@ async function pitcherOutcome(type){
  const details={strikeout:"手動登記三振結果",walk:"手動登記四壞保送",balk:"投手犯規，不計入投球數",error:"守備失誤，打者上壘"};
  // A balk is not a pitch. Strikeout/walk buttons record a completed result, not an extra pitch.
  if(type==="error")countPitch(s,"inPlay");
- eventRecord(s,labels[type],details[type],{outcome:type,pitchType:type==="error"?"inPlay":null},before);
+ eventRecord(s,labels[type],details[type],{outcome:type,pitchType:type==="error"?"inPlay":null,outsRecorded:type==="strikeout"?1:0},before);
  if(type==="strikeout"){s.outs=Math.min(3,s.outs+1);s.balls=0;s.strikes=0;autoChangeHalfIfThreeOuts(s)}
  if(type==="walk"){s.balls=0;s.strikes=0}
  await saveScoring();
@@ -355,6 +363,16 @@ async function undoScoring(){
  else {if(["壞球","好球","界外球"].includes(last.label))s.pitches=Math.max(0,s.pitches-1);s.balls=0;s.strikes=0}
  await saveScoring();
 }
+$("startingPitcherSelect").addEventListener("change",async e=>{
+ const g=currentGame();if(!g)return;const s=ensureLive(g),id=e.target.value||"";
+ if(s.events.some(x=>x.meta?.pitchType||x.meta?.outcome==="strikeout"||x.meta?.outcome==="walk")){toast("比賽已開始投球，不能再修改先發投手");renderScoring();return}
+ if(id&&Object.values(s.defense).some((value,codeIndex)=>value===id&&Object.keys(s.defense)[codeIndex]!=="P")){toast("先發投手已被安排在其他守備位置，請先調整守備");renderScoring();return}
+ s.startingPitcherId=id;
+ if(id){s.defense.P=id;s.activePitcherId=id}else if(s.activePitcherId===s.startingPitcherId){s.activePitcherId="";delete s.defense.P}
+ const p=state.players.find(x=>x.id===id);
+ eventRecord(s,"本場先發投手設定",id?"指定 #"+p.number+" "+p.name+" 為先發投手":"取消先發投手指定",{startingPitcherChange:true,startingPitcherId:id});
+ await saveScoring();toast(id?"先發投手已設定":"已取消先發投手設定");
+});
 $("pitcherSelect").addEventListener("change",async e=>{
  const g=currentGame();if(!g)return;const s=ensureLive(g),nextId=e.target.value,previousId=s.activePitcherId||"";
  if(nextId===previousId)return;
@@ -390,7 +408,7 @@ const fieldPositionOptions=[["P","投手"],["C","捕手"],["1B","一壘手"],["2
 function renderFieldPlayControls(){const s=currentGame()?ensureLive(currentGame()):null;if(!s)return;const source=$("fieldSource"),target=$("fieldTarget"),finalTarget=$("fieldFinalTarget");const old=[source.value,target.value,finalTarget.value];for(const [sel,first] of [[source,"選擇接球位置"],[target,"選擇傳球目標"],[finalTarget,"選擇最後傳球目標"]]){sel.innerHTML='<option value="">'+first+'</option>'+fieldPositionOptions.filter(([code])=>s.defense[code]).map(([code,label])=>'<option value="'+code+'">'+label+'</option>').join("");}if(s.defense[old[0]])source.value=old[0];if(s.defense[old[1]])target.value=old[1];if(s.defense[old[2]])finalTarget.value=old[2];updateFieldPlayControls();}
 function updateFieldPlayControls(){const type=$("fieldPlayType").value,isFly=type==="flyout",isError=type==="error",isDouble=type==="doubleplay",isSolo=["unassisted","tagout"].includes(type);$("fieldTargetWrap").hidden=isFly||isError||isSolo;$("fieldFinalWrap").hidden=!isDouble;$("fieldPlayHint").textContent=type==="unassisted"?"選擇持球踩壘完成封殺的守備位置，只記該球員 1 次刺殺 PO，不記助殺 A。":type==="tagout"?"選擇持球觸殺跑者的守備位置，只記該球員 1 次刺殺 PO。":isFly?"選擇完成接殺的守備位置，系統自動記錄該球員刺殺。":isError?"選擇發生失誤的守備位置，系統自動記錄失誤，不增加出局數。":isDouble?"選擇接球位置、第一次傳球目標及最後刺殺位置，系統自動記錄雙殺的助殺與刺殺。":"例如：游擊手接球，傳向一壘刺殺，系統自動記錄游擊手助殺及一壘手刺殺。";}
 $("fieldPlayType").addEventListener("change",updateFieldPlayControls);
-$("recordFieldPlay").addEventListener("click",async()=>{const g=currentGame();if(!g)return;const s=ensureLive(g);if(s.status==="已結束"){toast("比賽已結束");return}if(ourTeamBatting(g,s)){toast("目前是我方進攻");return}const type=$("fieldPlayType").value,source=$("fieldSource").value,target=$("fieldTarget").value,finalTarget=$("fieldFinalTarget").value,getPlayer=code=>code?s.defense[code]||"":"";const pos=code=>fieldPositionOptions.find(x=>x[0]===code)?.[1]||"";if(!source||!getPlayer(source)){toast("請先設定並選擇接球守備位置");return}if(type==="groundout"&&(!target||!getPlayer(target))){toast("請選擇傳球刺殺位置，並確認該位置已設定球員");return}if(type==="groundout"&&source===target){toast("接球位置與傳球刺殺位置相同，請修正位置");return}if(type==="doubleplay"&&(!target||!finalTarget||!getPlayer(target)||!getPlayer(finalTarget))){toast("雙殺需要設定第一次及最後傳球的守備位置");return}if(type==="doubleplay"&&new Set([source,target,finalTarget]).size!==3){toast("雙殺的三個守備位置必須不同");return}if(type==="groundout"&&source===target){toast("接球位置與傳球刺殺位置相同，請修正位置");return}const entries=[],add=(code,action)=>{const id=getPlayer(code);if(id)entries.push({fielderId:id,fieldingAction:action,fieldingPosition:pos(code)});};if(type==="flyout"||type==="unassisted"||type==="tagout")add(source,"putout");else if(type==="error")add(source,"error");else if(type==="groundout"){add(source,"assist");add(target,"putout")}else{add(source,"assist");add(target,"assist");add(target,"putout");add(finalTarget,"putout")}const outsAdded=type==="doubleplay"?2:type==="error"?0:1,labels={groundout:"滾地球出局（傳球刺殺）",unassisted:"自踩壘包封殺",tagout:"持球觸殺跑者",flyout:"飛球接殺",doubleplay:"雙殺",error:"守備失誤"};const detail=entries.map(x=>{const p=state.players.find(z=>z.id===x.fielderId);return "#"+(p?.number||"")+" "+(p?.name||"未知球員")+"・"+x.fieldingPosition+" "+({putout:"刺殺",assist:"助殺",error:"失誤"}[x.fieldingAction])}).join("；");const before={balls:s.balls,strikes:s.strikes,outs:s.outs,pitches:s.pitches,inningPitches:{...s.inningPitches}};eventRecord(s,labels[type],detail,{fieldingPlay:type,fieldingEntries:entries,outsAdded},before);s.outs=Math.min(3,s.outs+outsAdded);s.balls=0;s.strikes=0;const changed=autoChangeHalfIfThreeOuts(s);await saveScoring();toast(type==="error"?"已記錄守備失誤":changed?"三出局！已自動換局":"已記錄守備結果，增加 "+outsAdded+" 個出局數");});
+$("recordFieldPlay").addEventListener("click",async()=>{const g=currentGame();if(!g)return;const s=ensureLive(g);if(s.status==="已結束"){toast("比賽已結束");return}if(ourTeamBatting(g,s)){toast("目前是我方進攻");return}const type=$("fieldPlayType").value,source=$("fieldSource").value,target=$("fieldTarget").value,finalTarget=$("fieldFinalTarget").value,getPlayer=code=>code?s.defense[code]||"":"";const pos=code=>fieldPositionOptions.find(x=>x[0]===code)?.[1]||"";if(!source||!getPlayer(source)){toast("請先設定並選擇接球守備位置");return}if(type==="groundout"&&(!target||!getPlayer(target))){toast("請選擇傳球刺殺位置，並確認該位置已設定球員");return}if(type==="groundout"&&source===target){toast("接球位置與傳球刺殺位置相同，請修正位置");return}if(type==="doubleplay"&&(!target||!finalTarget||!getPlayer(target)||!getPlayer(finalTarget))){toast("雙殺需要設定第一次及最後傳球的守備位置");return}if(type==="doubleplay"&&new Set([source,target,finalTarget]).size!==3){toast("雙殺的三個守備位置必須不同");return}if(type==="groundout"&&source===target){toast("接球位置與傳球刺殺位置相同，請修正位置");return}const entries=[],add=(code,action)=>{const id=getPlayer(code);if(id)entries.push({fielderId:id,fieldingAction:action,fieldingPosition:pos(code)});};if(type==="flyout"||type==="unassisted"||type==="tagout")add(source,"putout");else if(type==="error")add(source,"error");else if(type==="groundout"){add(source,"assist");add(target,"putout")}else{add(source,"assist");add(target,"assist");add(target,"putout");add(finalTarget,"putout")}const outsAdded=type==="doubleplay"?2:type==="error"?0:1,labels={groundout:"滾地球出局（傳球刺殺）",unassisted:"自踩壘包封殺",tagout:"持球觸殺跑者",flyout:"飛球接殺",doubleplay:"雙殺",error:"守備失誤"};const detail=entries.map(x=>{const p=state.players.find(z=>z.id===x.fielderId);return "#"+(p?.number||"")+" "+(p?.name||"未知球員")+"・"+x.fieldingPosition+" "+({putout:"刺殺",assist:"助殺",error:"失誤"}[x.fieldingAction])}).join("；");const before={balls:s.balls,strikes:s.strikes,outs:s.outs,pitches:s.pitches,inningPitches:{...s.inningPitches}};eventRecord(s,labels[type],detail,{fieldingPlay:type,fieldingEntries:entries,outsAdded,pitcherId:s.activePitcherId||"",outsRecorded:outsAdded},before);s.outs=Math.min(3,s.outs+outsAdded);s.balls=0;s.strikes=0;const changed=autoChangeHalfIfThreeOuts(s);await saveScoring();toast(type==="error"?"已記錄守備失誤":changed?"三出局！已自動換局":"已記錄守備結果，增加 "+outsAdded+" 個出局數");});
 $("subSlot").addEventListener("change",()=>renderScoring());
 $("substituteBtn").addEventListener("click",async()=>{const g=currentGame();if(!g)return;const s=ensureLive(g),slot=Number($("subSlot").value)-1,nextId=$("subPlayer").value,position=$("subPosition").value,previousId=s.lineup[slot]||"";if(!nextId){toast("請先選擇替補球員");return}if(nextId===previousId){toast("替補球員與原球員相同");return}if(s.lineup.some((id,i)=>i!==slot&&id===nextId)){toast("這位球員已在其他棒次，不能重複排入");return}const from=state.players.find(p=>p.id===previousId),to=state.players.find(p=>p.id===nextId),label=(p)=>p?"#"+p.number+" "+p.name:"未設定";const record={slot:slot+1,fromPlayerId:previousId,toPlayerId:nextId,position,inning:s.inning,half:s.half,inningLabel:"第"+s.inning+"局"+(s.half==="top"?"上":"下"),time:new Date().toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit"})};eventRecord(s,"球員替補",record.slot+" 棒："+label(from)+" → "+label(to)+(position?"（"+position+"）":""),{substitution:true,...record});s.substitutions.push(record);s.lineup[slot]=nextId;s.lineupPositions[slot]=position;for(const code of Object.keys(s.defense)){if(s.defense[code]===previousId)s.defense[code]=nextId;}if(s.lineupIndex===slot)s.activeBatterId=nextId;if(s.activePitcherId===previousId&&position==="投手")s.activePitcherId=nextId;else if(s.activePitcherId===previousId)s.activePitcherId="";await saveScoring();toast("替補完成，歷史紀錄已保留")});
 for(let i=0;i<9;i++)$("lineup"+(i+1)).addEventListener("change",async e=>{const g=currentGame();if(!g)return;const s=ensureLive(g);s.lineup[i]=e.target.value;const selectedPlayer=state.players.find(p=>p.id===e.target.value);s.lineupPositions[i]=selectedPlayer?.position||"";if(i===s.lineupIndex)s.activeBatterId=e.target.value;await persist();scheduleCloudSync();renderScoring();toast("第 "+(i+1)+" 棒已更新")});
@@ -400,7 +418,7 @@ $("scorePage").addEventListener("click",async e=>{
  if(a==="back"){go("games");return}
  if(a==="half"){await nextHalf();return}
  if(a==="undo"){await undoScoring();return}
- if(a==="finish"||a==="resume"){const g=currentGame();if(g){ensureLive(g).status=a==="finish"?"已結束":"進行中";await saveScoring()}return}
+ if(a==="finish"||a==="resume"){const g=currentGame();if(g){const live=ensureLive(g);live.status=a==="finish"?"已結束":"進行中";if(a==="finish")live.finishedAt=new Date().toISOString();else delete live.finishedAt;await saveScoring();if(a==="finish"){renderPitcherEndSummary(g,live);toast("比賽結束，投手 IP／ER／ERA 已結算")}}return}
  if(a==="awayPlus"){await adjustScore("away",1);return}if(a==="awayMinus"){await adjustScore("away",-1);return}
  if(a==="homePlus"){await adjustScore("home",1);return}if(a==="homeMinus"){await adjustScore("home",-1);return}
  if(["ball","strike","foul"].includes(a)){await defensePitch(a);return}
@@ -413,6 +431,20 @@ $("scorePage").addEventListener("click",async e=>{
  if(["single","double","triple","homerun","hbp","out","sacFly","sacBunt"].includes(a))await offenseResult(a);
 });
 
+
+function pitcherOutsFor(s,pitcherId){return (s.events||[]).reduce((sum,e)=>sum+(e.meta?.pitcherId===pitcherId?Number(e.meta?.outsRecorded)||0:0),0)}
+function formatPitchingIP(outs){return Math.floor(outs/3)+"."+(outs%3)}
+function renderPitcherEndSummary(g,s){
+ const host=$("pitcherEndSummary");if(!host)return;
+ if(s.status!=="已結束"){host.innerHTML="";return}
+ const ids=[...new Set([s.startingPitcherId,...(s.events||[]).map(e=>e.meta?.pitcherId),...(s.events||[]).flatMap(e=>(e.meta?.runRecords||[]).map(r=>r.pitcherId))].filter(Boolean))];
+ if(!ids.length){host.innerHTML='<div class="analysis-card"><h3>本場投手結算</h3><p class="analysis-note">尚未指定投手或沒有投球紀錄。</p></div>';return}
+ const rows=ids.map(id=>{
+  const p=state.players.find(x=>x.id===id),outs=pitcherOutsFor(s,id),runs=(s.events||[]).flatMap(e=>e.meta?.runRecords||[]).filter(r=>r.pitcherId===id),er=runs.filter(r=>r.earned).length,uer=runs.length-er,ip=outs/3,era=outs?er*27/outs:null,gs=id===s.startingPitcherId?1:0;
+  return '<tr><td>'+esc(p?'#'+p.number+" "+p.name:"未知球員")+'</td><td>'+gs+'</td><td>'+formatPitchingIP(outs)+'</td><td>'+runs.length+'</td><td>'+er+'</td><td>'+uer+'</td><td>'+(era===null?"--":era.toFixed(2))+'</td></tr>';
+ }).join("");
+ host.innerHTML='<section class="analysis-card"><div class="analysis-card-head"><h2>本場投手結算</h2><span>FINAL PITCHING</span></div><div class="analysis-table-wrap"><table class="analysis-table"><thead><tr><th>投手</th><th>GS</th><th>IP</th><th>R</th><th>ER</th><th>UER</th><th>ERA</th></tr></thead><tbody>'+rows+'</tbody></table></div><p class="analysis-note">ERA = ER × 9 ÷ IP。IP 以實際出局數計算（每 3 個出局數為 1 局）。自責分可至「投手分析」頁面覆核修正；修正後重新開啟本場比賽即可更新結算。</p></section>';
+}
 function renderPitchAnalysis(){
  const gameSelect=$("analysisGame"),pitcherSelect=$("analysisPitcher");
  const games=state.games.filter(g=>g.live&&Array.isArray(g.live.events));
@@ -440,9 +472,9 @@ function renderPitchAnalysis(){
   const strikes=pitches.filter(e=>["strike","foul","inPlay"].includes(e.meta.pitchType)).length;
   const fouls=pitches.filter(e=>e.meta.pitchType==="foul").length;
   const pitcherRuns=events.flatMap(e=>e.meta?.runRecords||[]).filter(r=>(r.pitcherId||"")===group.id),runsAllowed=pitcherRuns.length,earnedRuns=pitcherRuns.filter(r=>r.earned).length,unearnedRuns=runsAllowed-earnedRuns;
-  const ks=group.events.filter(e=>e.label==="三振出局").length,walks=group.events.filter(e=>e.label==="四壞球保送").length,wildPitches=group.events.filter(e=>e.meta?.wildPitch).length,balks=group.events.filter(e=>e.label==="投手犯規").length,errors=group.events.filter(e=>e.label==="失誤上壘").length,rate=total?Math.round(strikes/total*100):0;
+  const outsRecorded=pitcherOutsFor(game.live,group.id),ipText=formatPitchingIP(outsRecorded),pitcherGS=game.live.startingPitcherId===group.id?1:0,eraValue=outsRecorded?earnedRuns*27/outsRecorded:null;const ks=group.events.filter(e=>e.label==="三振出局").length,walks=group.events.filter(e=>e.label==="四壞球保送").length,wildPitches=group.events.filter(e=>e.meta?.wildPitch).length,balks=group.events.filter(e=>e.label==="投手犯規").length,errors=group.events.filter(e=>e.label==="失誤上壘").length,rate=total?Math.round(strikes/total*100):0;
   const rows=Object.keys(group.innings).sort((a,b)=>Number(a)-Number(b)).map(n=>{const x=group.innings[n];return '<tr><td>第 '+n+' 局</td><td>'+x.pitches+'</td><td>'+x.balls+'</td><td>'+x.strikes+'</td><td>'+x.fouls+'</td><td>'+x.k+'</td><td>'+x.bb+'</td></tr>'}).join("");
-  return '<article class="analysis-card"><div class="analysis-card-head"><h2>'+esc(name)+'</h2><span>'+total+' 球</span></div><div class="analysis-metrics"><div><small>好球率（含界外）</small><strong>'+(total?rate+"%":"--")+'</strong></div><div><small>好球／界外／場內球</small><strong>'+strikes+'</strong></div><div><small>壞球</small><strong>'+balls+'</strong></div><div><small>界外球</small><strong>'+fouls+'</strong></div><div><small>三振</small><strong>'+ks+'</strong></div><div><small>四壞</small><strong>'+walks+'</strong></div><div><small>失分 R</small><strong>'+runsAllowed+'</strong></div><div><small>自責分 ER</small><strong>'+earnedRuns+'</strong></div><div><small>非自責分 UER</small><strong>'+unearnedRuns+'</strong></div><div><small>暴投 WP</small><strong>'+wildPitches+'</strong></div><div><small>投手犯規</small><strong>'+balks+'</strong></div><div><small>失誤上壘</small><strong>'+errors+'</strong></div></div><div class="analysis-table-wrap"><table class="analysis-table"><thead><tr><th>局數</th><th>總球數</th><th>壞球</th><th>好球</th><th>界外</th><th>三振</th><th>四壞</th></tr></thead><tbody>'+rows+'</tbody></table></div></article>';
+  return '<article class="analysis-card"><div class="analysis-card-head"><h2>'+esc(name)+'</h2><span>'+total+' 球</span></div><div class="analysis-metrics"><div><small>好球率（含界外）</small><strong>'+(total?rate+"%":"--")+'</strong></div><div><small>好球／界外／場內球</small><strong>'+strikes+'</strong></div><div><small>壞球</small><strong>'+balls+'</strong></div><div><small>界外球</small><strong>'+fouls+'</strong></div><div><small>三振</small><strong>'+ks+'</strong></div><div><small>四壞</small><strong>'+walks+'</strong></div><div><small>失分 R</small><strong>'+runsAllowed+'</strong></div><div><small>自責分 ER</small><strong>'+earnedRuns+'</strong></div><div><small>非自責分 UER</small><strong>'+unearnedRuns+'</strong></div><div><small>先發 GS</small><strong>'+pitcherGS+'</strong></div><div><small>投球局數 IP</small><strong>'+ipText+'</strong></div><div><small>防禦率 ERA</small><strong>'+(eraValue===null?"--":eraValue.toFixed(2))+'</strong></div><div><small>暴投 WP</small><strong>'+wildPitches+'</strong></div><div><small>投手犯規</small><strong>'+balks+'</strong></div><div><small>失誤上壘</small><strong>'+errors+'</strong></div></div><div class="analysis-table-wrap"><table class="analysis-table"><thead><tr><th>局數</th><th>總球數</th><th>壞球</th><th>好球</th><th>界外</th><th>三振</th><th>四壞</th></tr></thead><tbody>'+rows+'</tbody></table></div></article>';
  }).join("");
  const runRows=events.flatMap((e,eventIndex)=>(e.meta?.runRecords||[]).map(r=>({e,r,eventIndex})));
  const runReview=runRows.length?'<section class="run-review"><h3>失分判定與修正</h3>'+runRows.map(({e,r})=>{const p=state.players.find(x=>x.id===r.pitcherId);return '<div class="run-review-row"><span>'+esc(p?'#'+p.number+' '+p.name:'未指定投手')+'｜'+esc(e.inningLabel||'')+'｜'+esc(e.label)+'</span><select data-run-review="'+esc(r.id)+'" data-event-time="'+esc(e.time||'')+'"><option value="earned"'+(r.earned?' selected':'')+'>自責分 ER</option><option value="unearned"'+(!r.earned?' selected':'')+'>非自責分 UER</option></select></div>'}).join('')+'</section>':'';
