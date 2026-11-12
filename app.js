@@ -113,7 +113,7 @@ function renderScoring(){
 }
 async function saveScoring(){await persist();renderScoring();scheduleCloudSync()}
 function eventRecord(s,label,detail="",meta={},beforeOverride=null){
- const before={inning:s.inning,half:s.half,balls:s.balls,strikes:s.strikes,outs:s.outs,pitches:s.pitches,inningPitches:{...s.inningPitches},bases:[...s.bases],away:s.away,home:s.home,lineupIndex:s.lineupIndex,lineup:[...s.lineup],lineupPositions:[...s.lineupPositions],substitutions:[...s.substitutions],defense:{...s.defense},defenseHistory:[...s.defenseHistory],activeBatterId:s.activeBatterId||"",activePitcherId:s.activePitcherId||"",runnerPitcherMap:{...(s.runnerPitcherMap||{})},...(beforeOverride||{})};
+ const before={inning:s.inning,half:s.half,balls:s.balls,strikes:s.strikes,outs:s.outs,pitches:s.pitches,inningPitches:{...s.inningPitches},bases:[...s.bases],away:s.away,home:s.home,lineupIndex:s.lineupIndex,lineup:[...s.lineup],lineupPositions:[...s.lineupPositions],startingPitcherId:s.startingPitcherId||"",substitutions:[...s.substitutions],defense:{...s.defense},defenseHistory:[...s.defenseHistory],activeBatterId:s.activeBatterId||"",activePitcherId:s.activePitcherId||"",runnerPitcherMap:{...(s.runnerPitcherMap||{})},...(beforeOverride||{})};
  const eventMeta={...meta};if(meta.pitchType||meta.outcome)eventMeta.pitcherId=s.activePitcherId||"";if(meta.batterOutcome)eventMeta.batterId=s.activeBatterId||"";if(meta.batterOutcome)eventMeta.batterId=s.activeBatterId||"";
  s.events.push({label,detail,meta:eventMeta, before,inning:s.inning,half:s.half,inningLabel:"第"+s.inning+"局"+(s.half==="top"?"上":"下"),time:new Date().toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit"})});
 }
@@ -225,7 +225,7 @@ async function recordManualRunnerEvent(action){
  const baseName=n=>n===4?"本壘":n+"壘";
  if(action==="runnerCaught"){
   s.bases[index]=null;s.outs=Math.min(3,s.outs+1);
-  eventRecord(s,reason,runnerName+" 從"+baseName(from)+"遭觸殺出局",{stolenBaseAttempt:true,caughtStealing:true,runnerId,fromBase:from},before);
+  eventRecord(s,reason,runnerName+" 從"+baseName(from)+"遭觸殺出局",{stolenBaseAttempt:true,caughtStealing:true,runnerId,fromBase:from,pitcherId:s.activePitcherId||"",outsRecorded:1},before);
   const changed=autoChangeHalfIfThreeOuts(s);
   await saveScoring();toast(changed?"盜壘失敗，三出局！已自動換局":"已記錄盜壘失敗／阻殺");return;
  }
@@ -359,7 +359,7 @@ async function undoScoring(){
  if(!s.events.length){toast("目前沒有紀錄");return}
  const last=s.events.pop();
  if(last.meta?.rbiCreditedTo!==undefined){const paEvent=[...s.events].reverse().find(e=>e.meta?.batterOutcome&&e.meta?.batterId===last.meta.rbiCreditedTo&&e.inning===last.inning&&e.half===last.half);if(paEvent){paEvent.meta.rbi=Number(last.meta.previousRbi)||0;paEvent.meta.scoringRbi=paEvent.meta.rbi}}
- if(last.before){if(last.before.inning!==undefined)s.inning=last.before.inning;if(last.before.half)s.half=last.before.half;s.balls=last.before.balls;s.strikes=last.before.strikes;s.outs=last.before.outs;s.pitches=last.before.pitches;s.inningPitches={...last.before.inningPitches};s.bases=[...(last.before.bases||[null,null,null])];s.away=last.before.away??s.away;s.home=last.before.home??s.home;s.lineupIndex=last.before.lineupIndex??s.lineupIndex;if(last.before.lineup)s.lineup=[...last.before.lineup];if(last.before.lineupPositions)s.lineupPositions=[...last.before.lineupPositions];if(last.before.substitutions)s.substitutions=[...last.before.substitutions];if(last.before.defense)s.defense={...last.before.defense};if(last.before.defenseHistory)s.defenseHistory=[...last.before.defenseHistory];if(last.before.runnerPitcherMap)s.runnerPitcherMap={...last.before.runnerPitcherMap};s.activeBatterId=last.before.activeBatterId??s.activeBatterId;s.activePitcherId=last.before.activePitcherId??s.activePitcherId}
+ if(last.before){if(last.before.inning!==undefined)s.inning=last.before.inning;if(last.before.half)s.half=last.before.half;s.balls=last.before.balls;s.strikes=last.before.strikes;s.outs=last.before.outs;s.pitches=last.before.pitches;s.inningPitches={...last.before.inningPitches};s.bases=[...(last.before.bases||[null,null,null])];s.away=last.before.away??s.away;s.home=last.before.home??s.home;s.lineupIndex=last.before.lineupIndex??s.lineupIndex;if(last.before.lineup)s.lineup=[...last.before.lineup];if(last.before.lineupPositions)s.lineupPositions=[...last.before.lineupPositions];if(last.before.startingPitcherId!==undefined)s.startingPitcherId=last.before.startingPitcherId;if(last.before.substitutions)s.substitutions=[...last.before.substitutions];if(last.before.defense)s.defense={...last.before.defense};if(last.before.defenseHistory)s.defenseHistory=[...last.before.defenseHistory];if(last.before.runnerPitcherMap)s.runnerPitcherMap={...last.before.runnerPitcherMap};s.activeBatterId=last.before.activeBatterId??s.activeBatterId;s.activePitcherId=last.before.activePitcherId??s.activePitcherId}
  else {if(["壞球","好球","界外球"].includes(last.label))s.pitches=Math.max(0,s.pitches-1);s.balls=0;s.strikes=0}
  await saveScoring();
 }
@@ -367,8 +367,8 @@ $("startingPitcherSelect").addEventListener("change",async e=>{
  const g=currentGame();if(!g)return;const s=ensureLive(g),id=e.target.value||"";
  if(s.events.some(x=>x.meta?.pitchType||x.meta?.outcome==="strikeout"||x.meta?.outcome==="walk")){toast("比賽已開始投球，不能再修改先發投手");renderScoring();return}
  if(id&&Object.values(s.defense).some((value,codeIndex)=>value===id&&Object.keys(s.defense)[codeIndex]!=="P")){toast("先發投手已被安排在其他守備位置，請先調整守備");renderScoring();return}
- s.startingPitcherId=id;
- if(id){s.defense.P=id;s.activePitcherId=id}else if(s.activePitcherId===s.startingPitcherId){s.activePitcherId="";delete s.defense.P}
+ const previousStarter=s.startingPitcherId||"";
+ if(id){s.startingPitcherId=id;s.defense.P=id;s.activePitcherId=id}else{s.startingPitcherId="";if(s.activePitcherId===previousStarter)s.activePitcherId="";if(s.defense.P===previousStarter)delete s.defense.P}
  const p=state.players.find(x=>x.id===id);
  eventRecord(s,"本場先發投手設定",id?"指定 #"+p.number+" "+p.name+" 為先發投手":"取消先發投手指定",{startingPitcherChange:true,startingPitcherId:id});
  await saveScoring();toast(id?"先發投手已設定":"已取消先發投手設定");
@@ -486,7 +486,7 @@ $("analysisContent").addEventListener("change",async e=>{
  const select=e.target.closest("[data-run-review]");if(!select)return;
  const g=state.games.find(x=>x.id===$("analysisGame").value);if(!g?.live)return;
  for(const event of g.live.events||[]){const run=(event.meta?.runRecords||[]).find(x=>x.id===select.dataset.runReview);if(run){run.earned=select.value==="earned";run.reviewed=true;run.reason="紀錄者手動修正";break}}
- await persist();scheduleCloudSync();renderPitchAnalysis();toast("已更新自責分判定");
+ await persist();scheduleCloudSync();renderPitchAnalysis();if(g.live.status==="已結束")renderPitcherEndSummary(g,g.live);toast("已更新自責分判定");
 });
 
 function renderBatterAnalysis(){
