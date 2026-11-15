@@ -15,6 +15,23 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
+// Firestore 不接受 undefined。遞迴清理本機比賽資料中的未定義欄位，
+// 物件欄位直接省略；陣列中的空值保留為 null，以免改變索引位置。
+function cleanFirestoreData(value){
+  if(value===undefined)return undefined;
+  if(value===null||typeof value!=="object")return value;
+  if(Array.isArray(value))return value.map(item=>{
+    const cleaned=cleanFirestoreData(item);
+    return cleaned===undefined?null:cleaned;
+  });
+  const result={};
+  for(const [key,item] of Object.entries(value)){
+    const cleaned=cleanFirestoreData(item);
+    if(cleaned!==undefined)result[key]=cleaned;
+  }
+  return result;
+}
+
 // Conservative snapshot retention: never touch the active generation, keep the newest
 // ten marked generations, and only consider ready generations older than 90 days.
 async function cleanupOldGenerations(userId, activeGeneration){
@@ -73,7 +90,7 @@ window.firebaseBridge = {
         const batch=writeBatch(db);
         for(const item of items.slice(i,i+400)){
           if(!item?.id)throw new Error(name+" 中有資料缺少 ID，已中止上傳");
-          batch.set(doc(ref,String(item.id)),item);
+          batch.set(doc(ref,String(item.id)),cleanFirestoreData(item));
         }
         await batch.commit();
       }
