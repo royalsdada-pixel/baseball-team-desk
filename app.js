@@ -239,7 +239,7 @@ async function recordManualRunnerEvent(action){
   const paEvent=[...s.events].reverse().find(e=>e.meta?.batterOutcome&&e.inning===s.inning&&e.half===s.half);
   if(paEvent){meta.rbiCreditedTo=paEvent.meta.batterId||"";meta.previousRbi=Number(paEvent.meta.rbi)||0;paEvent.meta.rbi=meta.previousRbi+1;paEvent.meta.scoringRbi=paEvent.meta.rbi;}
  }
- if(to===4)meta.runRecords=attachRunRecords(s,[runnerId],s.activePitcherId||"",action==="runnerPB"?"PB":action==="runnerWP"?"WP":null);
+ if(to===4&&!ourTeamBatting(g,s))meta.runRecords=attachRunRecords(s,[runnerId],s.activePitcherId||"",action==="runnerPB"?"PB":action==="runnerWP"?"WP":null);
  eventRecord(s,reason,runnerName+" 從"+baseName(from)+"前進至"+baseName(to)+(to===4?"，跑者得分":""),meta,before);
  await saveScoring();toast(reason+"已記錄"+(to===4?"，比分與打點已更新":""));
 }
